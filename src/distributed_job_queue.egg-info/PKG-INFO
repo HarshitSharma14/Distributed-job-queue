@@ -1,7 +1,0 @@
-Metadata-Version: 2.4
-Name: distributed-job-queue
-Version: 0.1.0
-Summary: A distributed job processing platform
-Requires-Python: >=3.11
-Requires-Dist: SQLAlchemy<3.0,>=2.0
-Requires-Dist: psycopg[binary]<4.0,>=3.1
