@@ -5,8 +5,8 @@ This is the working checklist for implementation. We complete and verify each it
 ## Current focus
 
 - **Current phase:** Phase 1 — Project foundation
-- **Next step:** Test repository state transitions and invalid updates
-- **Current milestone:** Job repository methods implemented
+- **Next step:** Implement job enqueueing
+- **Current milestone:** Persistence layer tested against PostgreSQL
 
 ## Phase 1 — Project foundation
 
@@ -32,7 +32,7 @@ This is the working checklist for implementation. We complete and verify each it
 - [x] Define job, worker, and attempt models
 - [x] Create PostgreSQL migrations
 - [x] Implement job repository methods
-- [ ] Test state transitions and invalid updates
+- [x] Test state transitions and invalid updates
 
 ## Phase 3 — Queue primitives
 
@@ -115,3 +115,4 @@ This is the working checklist for implementation. We complete and verify each it
 | 2026-08-20 | Initial migration added | Added Alembic configuration and schema migration for jobs, workers, and attempts |
 | 2026-08-23 | Initial migration applied | Successfully created the PostgreSQL schema with `alembic upgrade head` |
 | 2026-08-23 | Job repository added | Added SQLAlchemy session setup and repository operations for jobs and attempts |
+| 2026-08-23 | Repository integration tests added | Verified PostgreSQL persistence, lifecycle transitions, invalid updates, and attempt history |
