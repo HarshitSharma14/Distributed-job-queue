@@ -5,8 +5,8 @@ This is the working checklist for implementation. We complete and verify each it
 ## Current focus
 
 - **Current phase:** Phase 1 — Project foundation
-- **Next step:** Implement job enqueueing
-- **Current milestone:** Persistence layer tested against PostgreSQL
+- **Next step:** Implement requeue after lease expiry
+- **Current milestone:** Redis claiming and leases verified
 
 ## Phase 1 — Project foundation
 
@@ -36,14 +36,14 @@ This is the working checklist for implementation. We complete and verify each it
 
 ## Phase 3 — Queue primitives
 
-- [ ] Implement job enqueueing
-- [ ] Implement named queues
-- [ ] Implement priority ordering
-- [ ] Implement atomic job claiming
-- [ ] Implement job leases
-- [ ] Implement lease renewal
+- [x] Implement job enqueueing
+- [x] Implement named queues
+- [x] Implement priority ordering
+- [x] Implement atomic job claiming
+- [x] Implement job leases
+- [x] Implement lease renewal
 - [ ] Implement requeue after lease expiry
-- [ ] Test concurrent claims and duplicate-claim prevention
+- [x] Test concurrent claims and duplicate-claim prevention
 
 ## Phase 4 — Worker execution
 
@@ -116,3 +116,6 @@ This is the working checklist for implementation. We complete and verify each it
 | 2026-08-23 | Initial migration applied | Successfully created the PostgreSQL schema with `alembic upgrade head` |
 | 2026-08-23 | Job repository added | Added SQLAlchemy session setup and repository operations for jobs and attempts |
 | 2026-08-23 | Repository integration tests added | Verified PostgreSQL persistence, lifecycle transitions, invalid updates, and attempt history |
+| 2026-08-23 | Redis enqueueing added | Added named Redis sorted-set queues with priority ordering and integration tests |
+| 2026-08-26 | Redis claiming verified | Fixed Lua argument mapping and verified priority claims, lease ownership, and renewal; full suite passes with 15 tests |
+| 2026-08-25 | Redis claiming and leases added | Added atomic Lua-script claims, worker leases, lease renewal, and integration tests |
