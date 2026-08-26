@@ -97,7 +97,7 @@ The queue stores ready jobs, supports priority ordering, claims, and leases.
 
 ### Choose: Redis sorted sets with atomic Lua scripts
 
-This provides priority queues, atomic claiming, and leases while keeping the queue mechanics understandable.
+This provides priority queues and short-lived tokenized leases while keeping durable job state and recovery in PostgreSQL.
 
 ---
 
@@ -303,7 +303,7 @@ Testing:             Pytest
                        │       │
                        ▼       ▼
                  PostgreSQL   Redis
-                 Job state    Queues + leases
+                 Job state    Queues + temporary leases
                            │
              ┌─────────────┼─────────────┐
              ▼             ▼             ▼
@@ -314,11 +314,11 @@ Testing:             Pytest
                          MinIO
                      Large results
 
+             Outbox Publisher
+               PostgreSQL → Redis
+
              Scheduler and Recovery
-                    Python processes
-                           │
-                           ▼
-                          Redis
+               PostgreSQL authority
 ```
 
 This technology stack is now locked separately from the HLD, component design, and LLD.

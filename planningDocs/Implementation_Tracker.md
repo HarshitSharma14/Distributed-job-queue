@@ -5,8 +5,8 @@ This is the working checklist for implementation. We complete and verify each it
 ## Current focus
 
 - **Current phase:** Phase 1 — Project foundation
-- **Next step:** Implement requeue after lease expiry
-- **Current milestone:** Redis claiming and leases verified
+- **Next step:** Implement the PostgreSQL outbox publisher
+- **Current milestone:** Durable lease/outbox migration applied; 17 tests pass
 
 ## Phase 1 — Project foundation
 
@@ -42,7 +42,10 @@ This is the working checklist for implementation. We complete and verify each it
 - [x] Implement atomic job claiming
 - [x] Implement job leases
 - [x] Implement lease renewal
-- [ ] Implement requeue after lease expiry
+- [x] Implement requeue after lease expiry
+- [x] Add transactional outbox for Redis publication
+- [ ] Implement the outbox publisher
+- [x] Add unique lease fencing tokens
 - [x] Test concurrent claims and duplicate-claim prevention
 
 ## Phase 4 — Worker execution
@@ -118,4 +121,6 @@ This is the working checklist for implementation. We complete and verify each it
 | 2026-08-23 | Repository integration tests added | Verified PostgreSQL persistence, lifecycle transitions, invalid updates, and attempt history |
 | 2026-08-23 | Redis enqueueing added | Added named Redis sorted-set queues with priority ordering and integration tests |
 | 2026-08-26 | Redis claiming verified | Fixed Lua argument mapping and verified priority claims, lease ownership, and renewal; full suite passes with 15 tests |
+| 2026-08-26 | Recovery architecture corrected | Moved authoritative recovery to PostgreSQL, added fencing tokens and transactional outbox, and reduced Redis to temporary coordination state |
+| 2026-08-26 | Durable recovery verified | Applied migration `0002`, confirmed no Alembic drift, and passed all 17 tests |
 | 2026-08-25 | Redis claiming and leases added | Added atomic Lua-script claims, worker leases, lease renewal, and integration tests |

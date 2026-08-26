@@ -121,6 +121,7 @@ attempts           integer
 max_attempts       integer
 available_at       timestamp
 lease_expires_at   timestamp nullable
+lease_token        UUID nullable
 worker_id          string nullable
 result_ref         string nullable
 error              JSON nullable
@@ -147,6 +148,19 @@ finished_at        timestamp nullable
 status             enum
 error              JSON nullable
 ```
+
+```text
+outbox_events
+-------------
+id                 UUID primary key
+job_id             UUID foreign key
+event_type         string
+payload            JSON
+created_at         timestamp
+published_at       timestamp nullable
+```
+
+Job creation and recovery write outbox events in the same PostgreSQL transaction. A publisher delivers pending events to Redis and marks them published.
 
 Large results are stored outside the job row; `result_ref` points to the result location. Small results may be stored inline when appropriate.
 
@@ -259,7 +273,7 @@ Workers can complete or fail a job only while they own its active lease.
 }
 ```
 
-The API validates the request, inserts the job as `CREATED`, publishes its ID to Redis, and changes it to `QUEUED`. An idempotency key is supported to prevent duplicate submissions.
+The API writes the `CREATED` job and a `JOB_READY` outbox event in one PostgreSQL transaction. An outbox publisher adds the job ID to Redis and changes it to `QUEUED`. An idempotency key prevents duplicate submissions.
 
 ## Claim options
 
@@ -278,9 +292,9 @@ The API validates the request, inserts the job as `CREATED`, publishes its ID to
 ### Choose: Worker pull with atomic claim and long polling
 
 1. Worker long-polls a compatible Redis queue.
-2. Redis atomically removes the job and creates a lease.
-3. Worker changes the database state to `RUNNING` and records an attempt.
-4. Worker renews the lease while processing.
+2. Redis atomically removes the job and creates a temporary lease with a unique token.
+3. Worker conditionally changes PostgreSQL to `RUNNING`, storing the worker, token, and expiration.
+4. Worker renews Redis and PostgreSQL using the same token.
 
 The claim operation must be atomic so two workers cannot own the same queue entry.
 
@@ -339,7 +353,7 @@ GET  /jobs/{job_id}
 
 ### Choose: Worker heartbeat plus job lease
 
-Workers periodically update `last_heartbeat_at`. A job lease has a TTL and is renewed while the job runs. If the lease expires, recovery clears ownership and republishes the job as `QUEUED` or `RETRY_WAIT`.
+Workers periodically update `last_heartbeat_at`. Redis holds a short-lived tokenized lease for coordination, while PostgreSQL stores authoritative ownership and expiration. Recovery queries expired `RUNNING` rows, clears ownership with row locking, and writes an outbox event for republication.
 
 This produces at-least-once delivery. Job handlers must therefore be idempotent.
 
@@ -447,12 +461,14 @@ Reliability is more important than eliminating every duplicate. Completion, fail
 
 ## Decision
 
-### Choose: PostgreSQL transactions plus Redis atomic commands/Lua scripts
+### Choose: PostgreSQL transactions, transactional outbox, and Redis atomic commands/Lua scripts
 
 - Use transactions for state changes and attempt records.
 - Use row locks or compare-and-set updates for completion, failure, and recovery.
-- Use atomic Redis operations for claim, lease creation, renewal, and requeue.
+- Use a transactional outbox whenever PostgreSQL state must produce a Redis queue entry.
+- Use atomic Redis operations for temporary claim, lease creation, renewal, and release.
 - Use job IDs as deduplication keys.
+- Use a unique lease token as a fencing token for renewal, completion, and failure.
 - Treat worker completion after lease expiry as a safe, idempotent no-op or recovery race.
 
 ---
@@ -501,8 +517,14 @@ Client
 API Service
   │
   ├─ Validate request
-  ├─ Create job in PostgreSQL as CREATED
-  ├─ Publish job ID to the selected Redis queue
+  └─ PostgreSQL transaction
+       ├─ Create job as CREATED
+       └─ Create JOB_READY outbox event
+  │
+  ▼
+Outbox publisher
+  ├─ Publish job ID to Redis
+  ├─ Mark event published
   └─ Change job state to QUEUED
   │
   ▼
@@ -518,9 +540,10 @@ Worker
   │
   │ Long-poll compatible Redis queue
   ▼
-Atomically claim job and create lease
+Atomically claim job and create tokenized Redis lease
   │
   ├─ Update PostgreSQL: QUEUED → RUNNING
+  ├─ Store worker_id, lease_token, and lease_expires_at
   ├─ Create job-attempt record
   ├─ Renew lease while processing
   └─ Execute handler
@@ -540,15 +563,18 @@ Worker starts job
 Worker crashes or stops heartbeating
   │
   ▼
-Job lease expires
+PostgreSQL lease_expires_at passes
   │
   ▼
-Recovery monitor detects expired lease
+Recovery monitor locks expired RUNNING row
   │
   ├─ Verify job is still RUNNING
   ├─ Clear worker ownership
   ├─ Increment attempt count
-  └─ Requeue job or move it to RETRY_WAIT
+  └─ Create JOB_READY outbox event in the same transaction
+  │
+  ▼
+Outbox publisher requeues the job in Redis
   │
   ▼
 Another worker claims and executes the job
@@ -594,7 +620,7 @@ The scheduler and recovery monitor must be safe to restart. Publishing and state
 API Service (FastAPI)
   ├─ validate and submit jobs
   ├─ expose job and worker status
-  └─ write PostgreSQL + publish Redis queue entries
+  └─ write PostgreSQL jobs + outbox events
 
 PostgreSQL
   ├─ jobs
@@ -605,7 +631,12 @@ PostgreSQL
 Redis
   ├─ named priority queues
   ├─ blocking/long-poll reads
-  └─ job leases and temporary delivery state
+  └─ tokenized temporary leases
+
+Outbox Publisher
+  ├─ read pending PostgreSQL events
+  ├─ publish job IDs to Redis
+  └─ mark events published
 
 Worker Processes
   ├─ register and heartbeat
@@ -615,7 +646,7 @@ Worker Processes
 
 Scheduler / Recovery Monitor
   ├─ release delayed and retryable jobs
-  ├─ requeue expired leases
+  ├─ recover expired PostgreSQL leases through the outbox
   └─ move exhausted jobs to the dead-letter queue
 ```
 

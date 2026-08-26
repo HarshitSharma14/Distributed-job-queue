@@ -1,6 +1,14 @@
 """Database models, sessions, and repositories."""
 
-from .models import Base, Job, JobAttempt, Worker
+from .models import Base, Job, JobAttempt, OutboxEvent, Worker
 from .database import SessionFactory, engine
 
-__all__ = ["Base", "Job", "JobAttempt", "Worker", "SessionFactory", "engine"]
+__all__ = [
+    "Base",
+    "Job",
+    "JobAttempt",
+    "OutboxEvent",
+    "Worker",
+    "SessionFactory",
+    "engine",
+]

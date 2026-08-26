@@ -51,6 +51,7 @@ def test_claim_returns_highest_priority_and_creates_lease(redis_queue):
     assert lease is not None
     assert lease.job_id == "high"
     assert lease.worker_id == "worker-1"
+    assert lease.token
     assert queue.queue_size(queue_name) == 1
     assert client.ttl("job-lease:high") > 0
 
@@ -69,7 +70,30 @@ def test_only_one_worker_can_claim_a_job(redis_queue):
 def test_only_lease_owner_can_renew(redis_queue):
     queue, _, queue_name = redis_queue
     queue.enqueue("job-1", queue=queue_name)
-    queue.claim(queue_name, worker_id="worker-1", lease_seconds=10)
+    lease = queue.claim(queue_name, worker_id="worker-1", lease_seconds=10)
+    assert lease is not None
 
-    assert queue.renew_lease("job-1", worker_id="worker-2") is False
-    assert queue.renew_lease("job-1", worker_id="worker-1", lease_seconds=30) is True
+    assert queue.renew_lease(
+        "job-1", worker_id="worker-2", token=lease.token
+    ) is False
+    assert queue.renew_lease(
+        "job-1", worker_id="worker-1", token="stale-token"
+    ) is False
+    assert queue.renew_lease(
+        "job-1", worker_id="worker-1", token=lease.token, lease_seconds=30
+    ) is True
+
+
+def test_only_current_owner_can_release_lease(redis_queue):
+    queue, _, queue_name = redis_queue
+    queue.enqueue("job-1", queue=queue_name)
+    lease = queue.claim(queue_name, worker_id="worker-1")
+    assert lease is not None
+
+    assert queue.release_lease(
+        "job-1", worker_id="worker-1", token="stale-token"
+    ) is False
+    assert queue.release_lease(
+        "job-1", worker_id="worker-1", token=lease.token
+    ) is True
+    assert queue.lease_ttl("job-1") == -2

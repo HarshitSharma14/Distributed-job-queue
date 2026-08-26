@@ -38,6 +38,7 @@ class Job(Base):
     lease_expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    lease_token: Mapped[str | None] = mapped_column(String(36), nullable=True)
     worker_id: Mapped[str | None] = mapped_column(
         String(100), ForeignKey("workers.id"), nullable=True
     )
@@ -96,3 +97,22 @@ class JobAttempt(Base):
     error: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
     job: Mapped[Job] = relationship(back_populates="attempts_history")
+
+
+class OutboxEvent(Base):
+    __tablename__ = "outbox_events"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    job_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    event_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    published_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )

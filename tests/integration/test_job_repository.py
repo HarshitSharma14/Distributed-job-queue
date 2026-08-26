@@ -1,11 +1,12 @@
 from datetime import datetime, timezone
 
 import pytest
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from distributed_job_queue.domain.job import InvalidJobTransition, JobStatus
 from distributed_job_queue.persistence.database import engine
-from distributed_job_queue.persistence.models import Base, Worker
+from distributed_job_queue.persistence.models import OutboxEvent, Worker
 from distributed_job_queue.persistence.repositories.jobs import JobRepository
 
 
@@ -33,6 +34,8 @@ def test_create_read_and_transition_job(repository):
     )
     assert job.status == JobStatus.CREATED.value
     assert job.attempts == 0
+    outbox_count = session.scalar(select(func.count()).select_from(OutboxEvent))
+    assert outbox_count == 1
 
     job_repository.transition(job, JobStatus.QUEUED)
     job_repository.transition(job, JobStatus.RUNNING)
@@ -74,3 +77,33 @@ def test_invalid_transition_and_attempt_history(repository):
     assert attempt.attempt_number == 1
     assert job.attempts == 1
     assert job.error == {"message": "temporary failure"}
+
+
+def test_claim_and_recover_expired_job_from_postgres(repository):
+    job_repository, session = repository
+    worker = Worker(id="recovery-worker", capabilities=["reports"])
+    session.add(worker)
+    job = job_repository.create(
+        job_type="generate_report",
+        queue="reports",
+        payload={},
+        priority=4,
+    )
+    job_repository.transition(job, JobStatus.QUEUED)
+    expired_at = datetime.now(timezone.utc)
+    job_repository.mark_running(
+        job.id,
+        worker_id=worker.id,
+        lease_token="lease-token",
+        lease_expires_at=expired_at,
+    )
+
+    recovered = job_repository.recover_expired(now=expired_at, limit=10)
+
+    assert [item.id for item in recovered] == [job.id]
+    assert job.status == JobStatus.QUEUED.value
+    assert job.worker_id is None
+    assert job.lease_token is None
+    assert job.lease_expires_at is None
+    outbox_count = session.scalar(select(func.count()).select_from(OutboxEvent))
+    assert outbox_count == 2

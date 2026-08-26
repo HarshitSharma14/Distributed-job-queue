@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import uuid
 
 from redis import Redis
 
@@ -14,6 +15,7 @@ class JobLease:
     job_id: str
     worker_id: str
     queue: str
+    token: str
 
 
 class RedisQueue:
@@ -35,16 +37,25 @@ class RedisQueue:
         redis.call('ZADD', KEYS[1], item[2], job_id)
         return {}
     end
-    redis.call('HSET', lease_key, 'worker_id', ARGV[1], 'queue', ARGV[2])
-    redis.call('EXPIRE', lease_key, ARGV[3])
+    redis.call('HSET', lease_key, 'worker_id', ARGV[1], 'queue', ARGV[2], 'token', ARGV[3])
+    redis.call('EXPIRE', lease_key, ARGV[4])
     return {job_id, lease_key}
     """
 
     _RENEW_SCRIPT = """
-    if redis.call('HGET', KEYS[1], 'worker_id') ~= ARGV[1] then
+    if redis.call('HGET', KEYS[1], 'worker_id') ~= ARGV[1]
+       or redis.call('HGET', KEYS[1], 'token') ~= ARGV[2] then
         return 0
     end
-    return redis.call('EXPIRE', KEYS[1], ARGV[2])
+    return redis.call('EXPIRE', KEYS[1], ARGV[3])
+    """
+
+    _RELEASE_SCRIPT = """
+    if redis.call('HGET', KEYS[1], 'worker_id') ~= ARGV[1]
+       or redis.call('HGET', KEYS[1], 'token') ~= ARGV[2] then
+        return 0
+    end
+    return redis.call('DEL', KEYS[1])
     """
 
     def __init__(self, client: Redis):
@@ -79,6 +90,7 @@ class RedisQueue:
         if lease_seconds < 1:
             raise ValueError("lease_seconds must be at least 1")
 
+        token = str(uuid.uuid4())
         result = self.client.eval(
             self._CLAIM_SCRIPT,
             2,
@@ -86,15 +98,21 @@ class RedisQueue:
             self._LEASE_PREFIX + ":",
             worker_id,
             queue,
+            token,
             lease_seconds,
         )
         if not result:
             return None
         job_id, _lease_key = result
-        return JobLease(job_id=job_id, worker_id=worker_id, queue=queue)
+        return JobLease(job_id=job_id, worker_id=worker_id, queue=queue, token=token)
 
     def renew_lease(
-        self, job_id: str, *, worker_id: str, lease_seconds: int = 60
+        self,
+        job_id: str,
+        *,
+        worker_id: str,
+        token: str,
+        lease_seconds: int = 60,
     ) -> bool:
         """Renew a lease only when the caller owns it."""
 
@@ -105,9 +123,22 @@ class RedisQueue:
             1,
             self._lease_key(job_id),
             worker_id,
+            token,
             lease_seconds,
         )
         return bool(renewed)
+
+    def release_lease(self, job_id: str, *, worker_id: str, token: str) -> bool:
+        """Release a lease only when the caller owns the current token."""
+
+        released = self.client.eval(
+            self._RELEASE_SCRIPT,
+            1,
+            self._lease_key(job_id),
+            worker_id,
+            token,
+        )
+        return bool(released)
 
     def lease_ttl(self, job_id: str) -> int:
         """Return the remaining lease time in seconds, or -2 if absent."""
