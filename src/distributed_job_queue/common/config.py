@@ -53,6 +53,8 @@ class Settings:
     retry_base_delay_seconds: int
     retry_max_delay_seconds: int
     max_attempts: int
+    outbox_batch_size: int
+    outbox_poll_interval_seconds: int
 
 
 def load_settings() -> Settings:
@@ -79,4 +81,8 @@ def load_settings() -> Settings:
         retry_base_delay_seconds=_get_int("RETRY_BASE_DELAY_SECONDS", 5, minimum=0),
         retry_max_delay_seconds=_get_int("RETRY_MAX_DELAY_SECONDS", 300, minimum=0),
         max_attempts=_get_int("MAX_ATTEMPTS", 5, minimum=1),
+        outbox_batch_size=_get_int("OUTBOX_BATCH_SIZE", 100, minimum=1),
+        outbox_poll_interval_seconds=_get_int(
+            "OUTBOX_POLL_INTERVAL_SECONDS", 1, minimum=1
+        ),
     )

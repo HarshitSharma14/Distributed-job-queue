@@ -19,6 +19,7 @@ distributed_job_queue/
 │       ├── common/
 │       ├── domain/
 │       ├── persistence/
+│       ├── publisher/
 │       ├── queueing/
 │       ├── recovery/
 │       ├── scheduler/
@@ -52,6 +53,10 @@ SQLAlchemy models, database sessions, migrations integration, and repositories f
 ### `queueing/`
 
 Redis queue operations: enqueue, priority ordering, atomic claim, leases, renewal, and requeue. Redis-specific behavior stays behind clear interfaces.
+
+### `publisher/`
+
+Transactional outbox publishing. Reads locked PostgreSQL outbox events, idempotently publishes job IDs to Redis, transitions jobs to `QUEUED`, and marks events published.
 
 ### `workers/`
 
@@ -96,6 +101,7 @@ API ───────────────┐
 Workers ───────────┤
 Scheduler ─────────┼──> Application/domain rules
 Recovery ──────────┘             │
+Publisher ─────────┤             │
                                  ├──> Persistence interfaces
                                  └──> Queue interfaces
 

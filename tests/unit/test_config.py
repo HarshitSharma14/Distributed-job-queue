@@ -12,6 +12,8 @@ def test_load_settings_uses_development_defaults():
     assert settings.database_url.startswith("postgresql+")
     assert settings.job_lease_seconds == 60
     assert settings.max_attempts == 5
+    assert settings.outbox_batch_size == 100
+    assert settings.outbox_poll_interval_seconds == 1
 
 
 def test_load_settings_parses_environment_values(monkeypatch):
