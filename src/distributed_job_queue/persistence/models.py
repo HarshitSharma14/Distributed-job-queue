@@ -11,6 +11,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from distributed_job_queue.domain.job import JobStatus
+from distributed_job_queue.domain.worker import WorkerStatus
 
 
 class Base(DeclarativeBase):
@@ -65,7 +66,9 @@ class Worker(Base):
 
     id: Mapped[str] = mapped_column(String(100), primary_key=True)
     capabilities: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="ONLINE")
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=WorkerStatus.ONLINE.value
+    )
     last_heartbeat_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

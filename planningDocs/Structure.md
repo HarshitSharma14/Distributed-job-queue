@@ -60,7 +60,7 @@ Transactional outbox publishing. Reads locked PostgreSQL outbox events, idempote
 
 ### `workers/`
 
-Worker process lifecycle, registration, heartbeats, long polling, handler execution, completion, and failure reporting.
+Worker process lifecycle. `runtime.py` owns registration and heartbeat database operations; `runner.py` owns the process loop, signal handling, and graceful shutdown. Long polling and job execution will be added here next.
 
 ### `scheduler/`
 
@@ -68,7 +68,7 @@ Finds delayed and retryable jobs that are ready, then publishes them to the appr
 
 ### `recovery/`
 
-Detects expired leases and offline workers, safely requeues abandoned jobs, and handles retry exhaustion.
+Health and recovery processes. Its current runner marks workers offline after their heartbeat deadline. Job lease recovery and retry exhaustion handling will also live here.
 
 ### `common/`
 

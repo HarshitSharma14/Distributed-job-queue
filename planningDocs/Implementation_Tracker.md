@@ -4,9 +4,9 @@ This is the working checklist for implementation. We complete and verify each it
 
 ## Current focus
 
-- **Current phase:** Phase 1 — Project foundation
-- **Next step:** Begin worker registration and heartbeat implementation
-- **Current milestone:** Transactional outbox publisher verified; 21 tests pass
+- **Current phase:** Phase 4 — Worker execution
+- **Next step:** Implement worker long polling and job handler registration
+- **Current milestone:** Worker registration, heartbeats, and offline detection implemented; 24 tests pass
 
 ## Phase 1 — Project foundation
 
@@ -52,8 +52,8 @@ This is the working checklist for implementation. We complete and verify each it
 
 ## Phase 4 — Worker execution
 
-- [ ] Implement worker registration
-- [ ] Implement worker heartbeats
+- [x] Implement worker registration
+- [x] Implement worker heartbeats
 - [ ] Implement long polling
 - [ ] Implement job handler registration
 - [ ] Implement successful job completion
@@ -128,3 +128,4 @@ This is the working checklist for implementation. We complete and verify each it
 | 2026-08-26 | Claim handoff corrected | Added idempotent enqueueing, ready-to-in-flight claims, timeout return, claim abandonment, and PostgreSQL queue reconciliation |
 | 2026-08-26 | Outbox publisher added | Added locked batch publication, idempotent Redis delivery, job state transition, process runner, and rollback/retry coverage |
 | 2026-08-25 | Redis claiming and leases added | Added atomic Lua-script claims, worker leases, lease renewal, and integration tests |
+| 2026-08-27 | Worker presence added | Added worker registration/reconnection, capabilities, periodic heartbeats, graceful offline marking, stale-worker monitoring, and PostgreSQL integration tests |

@@ -16,6 +16,8 @@ dependencies = [
 
 [project.scripts]
 outbox-publisher = "distributed_job_queue.publisher.runner:main"
+job-worker = "distributed_job_queue.workers.runner:main"
+worker-monitor = "distributed_job_queue.recovery.runner:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
