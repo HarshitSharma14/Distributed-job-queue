@@ -292,9 +292,11 @@ The API writes the `CREATED` job and a `JOB_READY` outbox event in one PostgreSQ
 ### Choose: Worker pull with atomic claim and long polling
 
 1. Worker long-polls a compatible Redis queue.
-2. Redis atomically removes the job and creates a temporary lease with a unique token.
+2. Redis atomically moves the job from ready to an in-flight set and creates a temporary lease with a unique token.
 3. Worker conditionally changes PostgreSQL to `RUNNING`, storing the worker, token, and expiration.
 4. Worker renews Redis and PostgreSQL using the same token.
+
+If the worker crashes before step 3, the Redis in-flight deadline returns the job to ready. If Redis loses all temporary state, a reconciler creates outbox events for authoritative PostgreSQL `QUEUED` jobs.
 
 The claim operation must be atomic so two workers cannot own the same queue entry.
 
@@ -631,7 +633,8 @@ PostgreSQL
 Redis
   ├─ named priority queues
   ├─ blocking/long-poll reads
-  └─ tokenized temporary leases
+  ├─ tokenized temporary leases
+  └─ temporary in-flight claims with deadlines
 
 Outbox Publisher
   ├─ read pending PostgreSQL events
@@ -647,6 +650,8 @@ Worker Processes
 Scheduler / Recovery Monitor
   ├─ release delayed and retryable jobs
   ├─ recover expired PostgreSQL leases through the outbox
+  ├─ return timed-out pre-database claims from Redis in-flight to ready
+  ├─ reconcile PostgreSQL QUEUED jobs after Redis data loss
   └─ move exhausted jobs to the dead-letter queue
 ```
 

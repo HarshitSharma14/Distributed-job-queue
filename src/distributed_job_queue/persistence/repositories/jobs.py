@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import exists, select, update
 from sqlalchemy.orm import Session
 
 from distributed_job_queue.domain.job import JobStatus, transition_job
@@ -133,6 +133,26 @@ class JobRepository:
             job.worker_id = None
             job.lease_token = None
             job.lease_expires_at = None
+            self._add_queue_event(job)
+        self.session.flush()
+        return jobs
+
+    def reconcile_queued(self, *, limit: int = 100) -> list[Job]:
+        """Create missing outbox events so Redis can be rebuilt from PostgreSQL."""
+
+        pending_event = exists().where(
+            OutboxEvent.job_id == Job.id,
+            OutboxEvent.event_type == "JOB_READY",
+            OutboxEvent.published_at.is_(None),
+        )
+        statement = (
+            select(Job)
+            .where(Job.status == JobStatus.QUEUED.value, ~pending_event)
+            .with_for_update(skip_locked=True)
+            .limit(limit)
+        )
+        jobs = list(self.session.scalars(statement))
+        for job in jobs:
             self._add_queue_event(job)
         self.session.flush()
         return jobs

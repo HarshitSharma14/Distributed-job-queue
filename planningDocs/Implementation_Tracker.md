@@ -6,7 +6,7 @@ This is the working checklist for implementation. We complete and verify each it
 
 - **Current phase:** Phase 1 — Project foundation
 - **Next step:** Implement the PostgreSQL outbox publisher
-- **Current milestone:** Durable lease/outbox migration applied; 17 tests pass
+- **Current milestone:** Crash-safe claim handoff verified; 19 tests pass
 
 ## Phase 1 — Project foundation
 
@@ -46,6 +46,8 @@ This is the working checklist for implementation. We complete and verify each it
 - [x] Add transactional outbox for Redis publication
 - [ ] Implement the outbox publisher
 - [x] Add unique lease fencing tokens
+- [x] Add temporary Redis in-flight claims
+- [x] Add PostgreSQL QUEUED-job reconciliation
 - [x] Test concurrent claims and duplicate-claim prevention
 
 ## Phase 4 — Worker execution
@@ -123,4 +125,5 @@ This is the working checklist for implementation. We complete and verify each it
 | 2026-08-26 | Redis claiming verified | Fixed Lua argument mapping and verified priority claims, lease ownership, and renewal; full suite passes with 15 tests |
 | 2026-08-26 | Recovery architecture corrected | Moved authoritative recovery to PostgreSQL, added fencing tokens and transactional outbox, and reduced Redis to temporary coordination state |
 | 2026-08-26 | Durable recovery verified | Applied migration `0002`, confirmed no Alembic drift, and passed all 17 tests |
+| 2026-08-26 | Claim handoff corrected | Added idempotent enqueueing, ready-to-in-flight claims, timeout return, claim abandonment, and PostgreSQL queue reconciliation |
 | 2026-08-25 | Redis claiming and leases added | Added atomic Lua-script claims, worker leases, lease renewal, and integration tests |

@@ -107,3 +107,26 @@ def test_claim_and_recover_expired_job_from_postgres(repository):
     assert job.lease_expires_at is None
     outbox_count = session.scalar(select(func.count()).select_from(OutboxEvent))
     assert outbox_count == 2
+
+
+def test_reconcile_queued_job_creates_missing_outbox_event(repository):
+    job_repository, session = repository
+    job = job_repository.create(
+        job_type="generate_report",
+        queue="reports",
+        payload={},
+    )
+    job_repository.transition(job, JobStatus.QUEUED)
+    events = list(session.scalars(select(OutboxEvent).where(OutboxEvent.job_id == job.id)))
+    events[0].published_at = datetime.now(timezone.utc)
+    session.flush()
+
+    reconciled = job_repository.reconcile_queued()
+
+    assert [item.id for item in reconciled] == [job.id]
+    pending_count = session.scalar(
+        select(func.count())
+        .select_from(OutboxEvent)
+        .where(OutboxEvent.job_id == job.id, OutboxEvent.published_at.is_(None))
+    )
+    assert pending_count == 1
