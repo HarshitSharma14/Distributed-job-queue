@@ -40,7 +40,7 @@ Main application package. Production code lives here.
 
 ### `api/`
 
-HTTP routes, request/response schemas, and API dependencies. This layer translates HTTP requests into application operations; business rules do not belong in route handlers.
+FastAPI application and process runner. `schemas.py` defines public contracts, `dependencies.py` owns request-scoped transactions, `services.py` coordinates application operations, and `routes.py` remains a thin HTTP adapter. Business rules do not belong in route handlers.
 
 ### `domain/`
 

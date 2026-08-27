@@ -524,13 +524,14 @@ API Service
        └─ Create JOB_READY outbox event
   │
   ▼
+Return job_id and status=CREATED
+
+Asynchronously:
+
 Outbox publisher
   ├─ Publish job ID to Redis
   ├─ Mark event published
   └─ Change job state to QUEUED
-  │
-  ▼
-Return job_id and status=QUEUED
 ```
 
 The operation must be safe to retry. An idempotency key prevents duplicate jobs after a client timeout.

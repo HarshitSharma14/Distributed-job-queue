@@ -41,6 +41,8 @@ class Settings:
 
     environment: str
     debug: bool
+    api_host: str
+    api_port: int
     database_url: str
     redis_url: str
     minio_endpoint: str
@@ -64,6 +66,8 @@ def load_settings() -> Settings:
     return Settings(
         environment=os.getenv("APP_ENV", "development"),
         debug=_get_bool("APP_DEBUG", False),
+        api_host=os.getenv("API_HOST", "0.0.0.0"),
+        api_port=_get_int("API_PORT", 8000, minimum=1),
         database_url=os.getenv(
             "DATABASE_URL", "postgresql+psycopg://queue:queue@localhost:5432/queue"
         ),

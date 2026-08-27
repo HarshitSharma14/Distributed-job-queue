@@ -5,8 +5,8 @@ This is the working checklist for implementation. We complete and verify each it
 ## Current focus
 
 - **Current phase:** Phase 5 — API service
-- **Next step:** Implement `POST /jobs` with transactional job and outbox creation
-- **Current milestone:** Complete worker runtime loop implemented and verified; 42 tests pass
+- **Next step:** Implement `GET /jobs/{job_id}` with attempt history
+- **Current milestone:** Transactional `POST /jobs` API implemented and verified; 50 tests pass
 
 ## Phase 1 — Project foundation
 
@@ -62,7 +62,7 @@ This is the working checklist for implementation. We complete and verify each it
 
 ## Phase 5 — API service
 
-- [ ] Implement `POST /jobs`
+- [x] Implement `POST /jobs`
 - [ ] Implement `GET /jobs/{job_id}`
 - [ ] Implement worker registration and heartbeat endpoints
 - [ ] Implement job completion and failure endpoints
@@ -132,3 +132,4 @@ This is the working checklist for implementation. We complete and verify each it
 | 2026-08-27 | Worker claim handoff added | Added Redis blocking notifications, prioritized atomic claims, handler registration, stale-claim cleanup, and fenced Redis-to-PostgreSQL `RUNNING` handoff |
 | 2026-08-27 | Fenced handler execution added | Added attempt-at-start accounting, background Redis/PostgreSQL lease renewal, token-guarded completion/failure, retry-wait selection, and lease-loss rejection |
 | 2026-08-28 | Worker runtime completed | Added explicit handler-module loading, independent heartbeats, queue subscription rotation, blocking claim/execution loop, graceful shutdown, and end-to-end runtime coverage |
+| 2026-08-28 | Job submission API added | Added validated `POST /jobs`, request-scoped transactions, atomic job/outbox persistence, deployable API runner, and HTTP integration tests |

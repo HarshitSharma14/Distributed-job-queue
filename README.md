@@ -95,3 +95,27 @@ job-worker \
 ```
 
 `--queue` and `--handler-module` may be repeated. If capabilities are not supplied explicitly, the worker advertises its registered job types.
+
+## Submit a job
+
+Start the API:
+
+```bash
+job-api
+```
+
+Submit an immediate job:
+
+```bash
+curl -X POST http://localhost:8000/jobs \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "type": "generate_report",
+    "queue": "reports",
+    "payload": {"report_id": 42},
+    "priority": 8,
+    "max_attempts": 3
+  }'
+```
+
+The API returns `202 Accepted` with status `CREATED`. The outbox publisher asynchronously delivers the job ID to Redis and changes the durable status to `QUEUED`.
