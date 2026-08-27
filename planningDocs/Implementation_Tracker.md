@@ -5,8 +5,8 @@ This is the working checklist for implementation. We complete and verify each it
 ## Current focus
 
 - **Current phase:** Phase 4 — Worker execution
-- **Next step:** Implement handler execution with lease renewal and fenced completion/failure updates
-- **Current milestone:** Redis-blocking long polling, handler registration, and durable claim handoff implemented; 31 tests pass
+- **Next step:** Wire the consumer and executor into the worker process loop
+- **Current milestone:** Fenced handler execution, dual lease renewal, and attempt recording implemented; 37 tests pass
 
 ## Phase 1 — Project foundation
 
@@ -56,8 +56,8 @@ This is the working checklist for implementation. We complete and verify each it
 - [x] Implement worker heartbeats
 - [x] Implement long polling
 - [x] Implement job handler registration
-- [ ] Implement successful job completion
-- [ ] Implement job failure reporting
+- [x] Implement successful job completion
+- [x] Implement job failure reporting
 - [ ] Verify the complete worker execution flow
 
 ## Phase 5 — API service
@@ -130,3 +130,4 @@ This is the working checklist for implementation. We complete and verify each it
 | 2026-08-25 | Redis claiming and leases added | Added atomic Lua-script claims, worker leases, lease renewal, and integration tests |
 | 2026-08-27 | Worker presence added | Added worker registration/reconnection, capabilities, periodic heartbeats, graceful offline marking, stale-worker monitoring, and PostgreSQL integration tests |
 | 2026-08-27 | Worker claim handoff added | Added Redis blocking notifications, prioritized atomic claims, handler registration, stale-claim cleanup, and fenced Redis-to-PostgreSQL `RUNNING` handoff |
+| 2026-08-27 | Fenced handler execution added | Added attempt-at-start accounting, background Redis/PostgreSQL lease renewal, token-guarded completion/failure, retry-wait selection, and lease-loss rejection |

@@ -571,9 +571,10 @@ PostgreSQL lease_expires_at passes
 Recovery monitor locks expired RUNNING row
   │
   ├─ Verify job is still RUNNING
+  ├─ Finish the active attempt as FAILED
   ├─ Clear worker ownership
-  ├─ Increment attempt count
-  └─ Create JOB_READY outbox event in the same transaction
+  ├─ If attempts remain: create JOB_READY outbox event
+  └─ If exhausted: mark the job FAILED
   │
   ▼
 Outbox publisher requeues the job in Redis

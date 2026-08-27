@@ -1,6 +1,7 @@
 """Worker runtime and task handlers."""
 
 from .consumer import ClaimedJob, WorkerConsumer
+from .executor import ExecutionOutcome, LeaseLost, LeaseRenewer, WorkerExecutor
 from .handlers import (
     DuplicateJobHandler,
     HandlerRegistry,
@@ -11,8 +12,12 @@ from .handlers import (
 __all__ = [
     "ClaimedJob",
     "DuplicateJobHandler",
+    "ExecutionOutcome",
     "HandlerRegistry",
     "JobHandler",
+    "LeaseLost",
+    "LeaseRenewer",
     "UnknownJobHandler",
     "WorkerConsumer",
+    "WorkerExecutor",
 ]

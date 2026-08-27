@@ -1,3 +1,4 @@
+import time
 import uuid
 
 import pytest
@@ -7,10 +8,16 @@ from sqlalchemy import delete, select
 from distributed_job_queue.common.config import load_settings
 from distributed_job_queue.domain.job import JobStatus
 from distributed_job_queue.persistence.database import SessionFactory
-from distributed_job_queue.persistence.models import Job, Worker
+from distributed_job_queue.persistence.models import Job, JobAttempt, Worker
 from distributed_job_queue.persistence.repositories import JobRepository
 from distributed_job_queue.queueing import RedisQueue
-from distributed_job_queue.workers import HandlerRegistry, UnknownJobHandler, WorkerConsumer
+from distributed_job_queue.workers import (
+    HandlerRegistry,
+    LeaseLost,
+    UnknownJobHandler,
+    WorkerConsumer,
+    WorkerExecutor,
+)
 
 
 @pytest.fixture
@@ -45,13 +52,14 @@ def consumer_context():
         client.delete(*keys)
 
 
-def create_queued_job(queue_name: str) -> str:
+def create_queued_job(queue_name: str, *, max_attempts: int = 5) -> str:
     with SessionFactory.begin() as session:
         repository = JobRepository(session)
         job = repository.create(
             job_type="generate_report",
             queue=queue_name,
             payload={"report_id": 42},
+            max_attempts=max_attempts,
         )
         repository.transition(job, JobStatus.QUEUED)
         return job.id
@@ -100,3 +108,150 @@ def test_unknown_handler_returns_job_to_ready(consumer_context):
         job = session.get(Job, job_id)
         assert job is not None
         assert job.status == JobStatus.QUEUED.value
+
+
+def test_executor_renews_lease_and_completes_slow_handler(consumer_context):
+    queue, registry, _, queue_name, worker_id = consumer_context
+
+    def slow_handler(payload):
+        time.sleep(1.2)
+        return payload["report_id"]
+
+    registry.register("generate_report", slow_handler)
+    job_id = create_queued_job(queue_name)
+    queue.enqueue(job_id, queue=queue_name)
+    claimed = WorkerConsumer(queue, registry).claim_next(
+        queue_name,
+        worker_id=worker_id,
+        lease_seconds=1,
+        wait_seconds=0,
+    )
+    assert claimed is not None
+
+    outcome = WorkerExecutor(
+        queue,
+        lease_seconds=1,
+        renewal_interval_seconds=0.2,
+    ).execute(claimed)
+
+    assert outcome.status == JobStatus.COMPLETED
+    assert outcome.result == 42
+    assert outcome.lease_released is True
+    assert queue.inflight_size(queue_name) == 0
+    with SessionFactory() as session:
+        job = session.get(Job, job_id)
+        assert job is not None
+        assert job.status == JobStatus.COMPLETED.value
+        assert job.attempts == 1
+        assert job.worker_id is None
+        attempts = list(
+            session.scalars(
+                select(JobAttempt).where(JobAttempt.job_id == job_id)
+            )
+        )
+        assert [attempt.status for attempt in attempts] == [
+            JobStatus.COMPLETED.value
+        ]
+
+
+def test_executor_records_handler_failure(consumer_context):
+    queue, registry, _, queue_name, worker_id = consumer_context
+
+    def failing_handler(_payload):
+        raise RuntimeError("report service unavailable")
+
+    registry.register("generate_report", failing_handler)
+    job_id = create_queued_job(queue_name)
+    queue.enqueue(job_id, queue=queue_name)
+    claimed = WorkerConsumer(queue, registry).claim_next(
+        queue_name,
+        worker_id=worker_id,
+        lease_seconds=10,
+        wait_seconds=0,
+    )
+    assert claimed is not None
+
+    outcome = WorkerExecutor(queue, lease_seconds=10).execute(claimed)
+
+    assert outcome.status == JobStatus.RETRY_WAIT
+    assert outcome.error == {
+        "type": "RuntimeError",
+        "message": "report service unavailable",
+    }
+    assert outcome.lease_released is True
+    with SessionFactory() as session:
+        job = session.get(Job, job_id)
+        assert job is not None
+        assert job.status == JobStatus.RETRY_WAIT.value
+        assert job.attempts == 1
+        assert job.error == outcome.error
+        attempt = session.scalar(
+            select(JobAttempt).where(JobAttempt.job_id == job_id)
+        )
+        assert attempt is not None
+        assert attempt.status == JobStatus.FAILED.value
+
+
+def test_executor_rejects_completion_after_redis_lease_is_lost(consumer_context):
+    queue, registry, client, queue_name, worker_id = consumer_context
+
+    def handler_after_lease_loss(payload):
+        time.sleep(0.3)
+        return payload["report_id"]
+
+    registry.register("generate_report", handler_after_lease_loss)
+    job_id = create_queued_job(queue_name)
+    queue.enqueue(job_id, queue=queue_name)
+    claimed = WorkerConsumer(queue, registry).claim_next(
+        queue_name,
+        worker_id=worker_id,
+        lease_seconds=1,
+        wait_seconds=0,
+    )
+    assert claimed is not None
+    client.delete(f"job-lease:{job_id}")
+
+    with pytest.raises(LeaseLost, match=job_id):
+        WorkerExecutor(
+            queue,
+            lease_seconds=1,
+            renewal_interval_seconds=0.1,
+        ).execute(claimed)
+
+    with SessionFactory() as session:
+        job = session.get(Job, job_id)
+        assert job is not None
+        assert job.status == JobStatus.RUNNING.value
+        assert job.attempts == 1
+        attempt = session.scalar(
+            select(JobAttempt).where(JobAttempt.job_id == job_id)
+        )
+        assert attempt is not None
+        assert attempt.status == JobStatus.RUNNING.value
+
+
+def test_executor_marks_job_failed_when_attempts_are_exhausted(consumer_context):
+    queue, registry, _, queue_name, worker_id = consumer_context
+
+    def failing_handler(_payload):
+        raise ValueError("invalid report")
+
+    registry.register("generate_report", failing_handler)
+    job_id = create_queued_job(queue_name, max_attempts=1)
+    queue.enqueue(job_id, queue=queue_name)
+    claimed = WorkerConsumer(queue, registry).claim_next(
+        queue_name,
+        worker_id=worker_id,
+        lease_seconds=10,
+        wait_seconds=0,
+    )
+    assert claimed is not None
+
+    outcome = WorkerExecutor(queue, lease_seconds=10).execute(claimed)
+
+    assert outcome.status == JobStatus.FAILED
+    with SessionFactory() as session:
+        job = session.get(Job, job_id)
+        assert job is not None
+        assert job.status == JobStatus.FAILED.value
+        assert job.attempts == 1

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import func, select
@@ -6,8 +6,11 @@ from sqlalchemy.orm import Session
 
 from distributed_job_queue.domain.job import InvalidJobTransition, JobStatus
 from distributed_job_queue.persistence.database import engine
-from distributed_job_queue.persistence.models import OutboxEvent, Worker
-from distributed_job_queue.persistence.repositories.jobs import JobRepository
+from distributed_job_queue.persistence.models import JobAttempt, OutboxEvent, Worker
+from distributed_job_queue.persistence.repositories.jobs import (
+    ConcurrentJobUpdate,
+    JobRepository,
+)
 
 
 @pytest.fixture
@@ -105,6 +108,15 @@ def test_claim_and_recover_expired_job_from_postgres(repository):
     assert job.worker_id is None
     assert job.lease_token is None
     assert job.lease_expires_at is None
+    attempt = session.scalar(
+        select(JobAttempt).where(JobAttempt.job_id == job.id)
+    )
+    assert attempt is not None
+    assert attempt.status == JobStatus.FAILED.value
+    assert attempt.error == {
+        "type": "LeaseExpired",
+        "message": "Worker lease expired",
+    }
     outbox_count = session.scalar(select(func.count()).select_from(OutboxEvent))
     assert outbox_count == 2
 
@@ -130,3 +142,63 @@ def test_reconcile_queued_job_creates_missing_outbox_event(repository):
         .where(OutboxEvent.job_id == job.id, OutboxEvent.published_at.is_(None))
     )
     assert pending_count == 1
+
+
+def test_stale_fencing_token_cannot_complete_job(repository):
+    job_repository, session = repository
+    worker = Worker(id="fenced-worker", capabilities=["reports"])
+    session.add(worker)
+    job = job_repository.create(
+        job_type="generate_report",
+        queue="reports",
+        payload={},
+    )
+    job_repository.transition(job, JobStatus.QUEUED)
+    now = datetime.now(timezone.utc)
+    job_repository.mark_running(
+        job.id,
+        worker_id=worker.id,
+        lease_token="current-token",
+        lease_expires_at=now + timedelta(minutes=1),
+    )
+
+    with pytest.raises(ConcurrentJobUpdate, match="no longer owns"):
+        job_repository.complete_execution(
+            job.id,
+            worker_id=worker.id,
+            lease_token="stale-token",
+            now=now,
+        )
+
+    stored = job_repository.get(job.id)
+    assert stored is not None
+    assert stored.status == JobStatus.RUNNING.value
+
+
+def test_expired_final_attempt_is_not_requeued(repository):
+    job_repository, session = repository
+    worker = Worker(id="exhausted-worker", capabilities=["reports"])
+    session.add(worker)
+    job = job_repository.create(
+        job_type="generate_report",
+        queue="reports",
+        payload={},
+        max_attempts=1,
+    )
+    job_repository.transition(job, JobStatus.QUEUED)
+    expired_at = datetime.now(timezone.utc)
+    job_repository.mark_running(
+        job.id,
+        worker_id=worker.id,
+        lease_token="final-token",
+        lease_expires_at=expired_at,
+    )
+
+    recovered = job_repository.recover_expired(now=expired_at)
+
+    assert [item.id for item in recovered] == [job.id]
+    assert job.status == JobStatus.FAILED.value
+    events = list(
+        session.scalars(select(OutboxEvent).where(OutboxEvent.job_id == job.id))
+    )
+    assert len(events) == 1
