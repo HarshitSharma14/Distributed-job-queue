@@ -5,8 +5,8 @@ This is the working checklist for implementation. We complete and verify each it
 ## Current focus
 
 - **Current phase:** Phase 5 — API service
-- **Next step:** Implement authenticated worker control endpoints or formally keep worker control in-process
-- **Current milestone:** Concurrent-safe submission idempotency implemented; 58 tests pass
+- **Next step:** Refactor worker operations behind the Worker Gateway API, starting with registration and heartbeat
+- **Current milestone:** Worker trust boundary locked: workers receive no PostgreSQL, Redis, or storage credentials
 
 ## Phase 1 — Project foundation
 
@@ -65,9 +65,21 @@ This is the working checklist for implementation. We complete and verify each it
 - [x] Implement `POST /jobs`
 - [x] Implement `GET /jobs/{job_id}`
 - [ ] Implement worker registration and heartbeat endpoints
+- [ ] Add the Worker Gateway module and limited worker-token dependency
+- [ ] Move job claim and start handoff behind the Worker Gateway
+- [ ] Move lease renewal behind the Worker Gateway
 - [ ] Implement job completion and failure endpoints
+- [ ] Remove direct PostgreSQL and Redis access from the worker runtime
+- [ ] Return temporary signed URLs for required handler artifacts
 - [x] Add request validation and idempotency handling
 - [ ] Add API tests
+
+## Deferred — Worker security design
+
+- [ ] Define worker credential issuance, expiration, rotation, and revocation
+- [ ] Define publisher, producer, worker, and admin authorization scopes
+- [ ] Define handler approval, signing, versioning, and artifact validation
+- [ ] Define handler isolation and sandboxing requirements
 
 ## Phase 6 — Reliability
 
@@ -135,3 +147,4 @@ This is the working checklist for implementation. We complete and verify each it
 | 2026-08-28 | Job submission API added | Added validated `POST /jobs`, request-scoped transactions, atomic job/outbox persistence, deployable API runner, and HTTP integration tests |
 | 2026-08-28 | Job detail API added | Added UUID-validated lookup, authoritative lifecycle fields, ordered attempt history, internal-token filtering, and not-found coverage |
 | 2026-08-28 | Submission idempotency added | Added durable idempotency keys, canonical request fingerprints, conflict detection, replay headers, a unique database constraint, and concurrent-race coverage |
+| 2026-08-28 | Worker trust boundary locked | Workers become execution agents behind a Worker Gateway and receive no PostgreSQL, Redis, or permanent storage credentials; detailed security design is deferred |

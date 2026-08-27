@@ -185,7 +185,9 @@ Workers need registration, heartbeats, completion, and failure reporting.
 
 ### Choose: REST over HTTP
 
-Redis handles asynchronous job delivery. Workers only need simple, inspectable control communication.
+Workers communicate exclusively with a Worker Gateway API. The gateway owns PostgreSQL, Redis, and object-storage access and performs long polling, claims, lease changes, and state transitions on the worker's behalf. Workers receive only job-specific payloads, approved handler information, fenced lease tokens, and temporary signed artifact URLs.
+
+The exact token scheme and handler security model will be selected in a separate security design.
 
 ---
 
@@ -287,8 +289,9 @@ Database Access:     SQLAlchemy
 Queue:               Redis sorted sets + blocking notification lists
 Queue Atomicity:     Redis Lua scripts
 Workers:             Python processes
-Job Delivery:        Redis blocking wait + atomic Lua claim
-Control Communication: REST over HTTP
+Job Delivery:        Gateway HTTP long poll + internal Redis atomic claim
+Control Communication: Worker Gateway REST API
+Worker Infrastructure Access: None
 Result Storage:      MinIO
 Deployment:          Docker Compose
 Testing:             Pytest
@@ -305,7 +308,11 @@ Testing:             Pytest
                        ▼       ▼
                  PostgreSQL   Redis
                  Job state    Queues + temporary leases
-                           │
+                       │       │
+                       └───┬───┘
+                           ▼
+                    Worker Gateway
+                           │ HTTPS
              ┌─────────────┼─────────────┐
              ▼             ▼             ▼
           Worker 1      Worker 2      Worker 3

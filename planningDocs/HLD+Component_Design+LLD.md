@@ -289,12 +289,12 @@ The API writes the `CREATED` job and a `JOB_READY` outbox event in one PostgreSQ
 
 ## Decision
 
-### Choose: Worker pull with atomic claim and long polling
+### Choose: Worker pull through a Worker Gateway API
 
-1. Worker long-polls a compatible Redis queue.
-2. Redis atomically moves the job from ready to an in-flight set and creates a temporary lease with a unique token.
-3. Worker conditionally changes PostgreSQL to `RUNNING`, storing the worker, token, and expiration.
-4. Worker renews Redis and PostgreSQL using the same token.
+1. The worker long-polls the Worker Gateway API for compatible work.
+2. The gateway atomically claims a job in Redis and creates a temporary lease with a unique token.
+3. The gateway conditionally changes PostgreSQL to `RUNNING`, storing the worker, token, and expiration.
+4. The worker renews its lease through the gateway, which updates Redis and PostgreSQL.
 
 If the worker crashes before step 3, the Redis in-flight deadline returns the job to ready. If Redis loses all temporary state, a reconciler creates outbox events for authoritative PostgreSQL `QUEUED` jobs.
 
@@ -323,18 +323,23 @@ The claim operation must be atomic so two workers cannot own the same queue entr
 
 ## Decision
 
-### Choose: Redis blocking wait with atomic priority claim
+### Choose: HTTP long polling through a Worker Gateway API
 
-Workers first try an immediate atomic claim. When the priority queue is empty, they block on a per-queue Redis notification list for a bounded period. Enqueueing atomically adds the job to the sorted set and emits a wake-up signal. A woken worker then runs the Lua claim against the sorted set. This avoids repeated empty-queue requests while preserving priority and leases.
+Workers communicate only with the gateway using a limited worker token. The gateway performs the Redis blocking wait and atomic priority claim, then performs authoritative state changes in PostgreSQL. Workers never receive PostgreSQL, Redis, or object-storage credentials.
+
+After assignment, a worker receives only the required job payload, approved handler metadata, a fenced lease token, and temporary signed artifact URLs when needed. It cannot query databases, modify queues, access unrelated jobs, or call internal services directly.
+
+Detailed credential issuance, token rotation, handler approval, and execution sandboxing are intentionally deferred to a dedicated security design. This document locks only the trust boundary: the platform controls state and infrastructure; workers execute approved workloads.
 
 ## Worker endpoints
 
 ```text
 POST /workers/register
 POST /workers/{worker_id}/heartbeat
-POST /jobs/{job_id}/heartbeat
-POST /jobs/{job_id}/complete
-POST /jobs/{job_id}/fail
+POST /worker-jobs/claim
+POST /worker-jobs/{job_id}/lease/renew
+POST /worker-jobs/{job_id}/complete
+POST /worker-jobs/{job_id}/fail
 GET  /jobs/{job_id}
 ```
 
@@ -541,18 +546,18 @@ The operation is safe to retry when the caller supplies an idempotency key. The 
 ```text
 Worker
   │
-  │ Long-poll compatible Redis queue
+  │ Long-poll Worker Gateway API
   ▼
-Atomically claim job and create tokenized Redis lease
+Gateway atomically claims job and creates tokenized Redis lease
   │
-  ├─ Update PostgreSQL: QUEUED → RUNNING
+  ├─ Gateway updates PostgreSQL: QUEUED → RUNNING
   ├─ Store worker_id, lease_token, and lease_expires_at
   ├─ Create job-attempt record
-  ├─ Renew lease while processing
+  ├─ Worker renews lease through the gateway while processing
   └─ Execute handler
        │
-       ├─ Success: save result, mark COMPLETED, remove lease
-       └─ Failure: record error, calculate retry or dead-letter
+       ├─ Success: gateway saves result, marks COMPLETED, and removes lease
+       └─ Failure: gateway records error and calculates retry or dead-letter
 ```
 
 Only the worker holding the active lease may complete or fail the job. Completion must be idempotent because a lease can expire near the end of execution.
@@ -626,6 +631,13 @@ API Service (FastAPI)
   ├─ expose job and worker status
   └─ write PostgreSQL jobs + outbox events
 
+Worker Gateway (FastAPI module)
+  ├─ authenticate limited worker tokens
+  ├─ register workers and receive heartbeats
+  ├─ long-poll and claim jobs through Redis
+  ├─ validate lease renewals and terminal reports
+  └─ provide payloads and temporary artifact references
+
 PostgreSQL
   ├─ jobs
   ├─ job_attempts
@@ -644,10 +656,10 @@ Outbox Publisher
   └─ mark events published
 
 Worker Processes
+  ├─ communicate only with the Worker Gateway
   ├─ register and heartbeat
-  ├─ pull compatible jobs
-  ├─ renew leases
-  └─ complete or fail jobs
+  ├─ execute approved handlers
+  └─ report lease renewal, completion, or failure
 
 Scheduler / Recovery Monitor
   ├─ release delayed and retryable jobs
@@ -664,10 +676,11 @@ Code Structure:       Separate API, worker, scheduler, and recovery processes
 Core Entity:           Job with explicit lifecycle
 Queue Structure:       Named queues with priority
 Assignment:            Worker pull
-Job Delivery:          Redis blocking wait + atomic Lua claim
-Control Communication: REST over HTTP
+Job Delivery:          Gateway HTTP long poll; internal Redis atomic claim
+Control Communication: Worker Gateway REST API
 Delivery:              At-least-once
 State:                 PostgreSQL source of truth
+Worker Trust Boundary: No direct database, Redis, or storage access
 Worker Management:     Registration + heartbeats
 Failure Recovery:      Job leases + requeue
 Retries:               Exponential backoff with jitter
