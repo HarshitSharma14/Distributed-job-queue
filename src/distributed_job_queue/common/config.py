@@ -49,6 +49,7 @@ class Settings:
     minio_bucket: str
     worker_heartbeat_interval_seconds: int
     worker_offline_after_seconds: int
+    worker_long_poll_seconds: int
     job_lease_seconds: int
     retry_base_delay_seconds: int
     retry_max_delay_seconds: int
@@ -76,6 +77,9 @@ def load_settings() -> Settings:
         ),
         worker_offline_after_seconds=_get_int(
             "WORKER_OFFLINE_AFTER_SECONDS", 60, minimum=1
+        ),
+        worker_long_poll_seconds=_get_int(
+            "WORKER_LONG_POLL_SECONDS", 20, minimum=0
         ),
         job_lease_seconds=_get_int("JOB_LEASE_SECONDS", 60, minimum=1),
         retry_base_delay_seconds=_get_int("RETRY_BASE_DELAY_SECONDS", 5, minimum=0),

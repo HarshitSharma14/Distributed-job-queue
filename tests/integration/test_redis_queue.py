@@ -1,3 +1,6 @@
+import threading
+import time
+
 import pytest
 from redis import Redis
 
@@ -14,6 +17,7 @@ def redis_queue():
         f"job-queue-sequence:{queue_name}",
         f"job-inflight:{queue_name}",
         f"job-inflight-score:{queue_name}",
+        f"job-notification:{queue_name}",
         "job-lease:high",
         "job-lease:job-1",
         "job-lease:job-expired",
@@ -32,6 +36,7 @@ def test_enqueue_is_idempotent(redis_queue):
 
     assert queue.queue_size(queue_name) == 1
     assert client.zscore(f"job-queue:{queue_name}", "job-1") == original_score
+    assert client.llen(f"job-notification:{queue_name}") == 1
 
 
 def test_enqueue_rejects_invalid_values(redis_queue):
@@ -58,6 +63,54 @@ def test_claim_moves_highest_priority_job_to_inflight(redis_queue):
     assert client.ttl("job-lease:high") > 0
 
 
+def test_long_poll_returns_an_available_job(redis_queue):
+    queue, _, queue_name = redis_queue
+    queue.enqueue("job-1", queue=queue_name)
+
+    lease = queue.long_poll(
+        queue_name,
+        worker_id="worker-1",
+        wait_seconds=1,
+    )
+
+    assert lease is not None
+    assert lease.job_id == "job-1"
+
+
+def test_long_poll_blocks_in_redis_until_job_arrives(redis_queue):
+    queue, _, queue_name = redis_queue
+    timer = threading.Timer(
+        0.1, lambda: queue.enqueue("job-1", queue=queue_name)
+    )
+    timer.start()
+    started = time.monotonic()
+    try:
+        lease = queue.long_poll(
+            queue_name,
+            worker_id="worker-1",
+            wait_seconds=2,
+        )
+    finally:
+        timer.join()
+
+    assert lease is not None
+    assert lease.job_id == "job-1"
+    assert time.monotonic() - started >= 0.05
+
+
+def test_long_poll_returns_none_without_waiting_when_timeout_is_zero(redis_queue):
+    queue, _, queue_name = redis_queue
+
+    assert (
+        queue.long_poll(
+            queue_name,
+            worker_id="worker-1",
+            wait_seconds=0,
+        )
+        is None
+    )
+
+
 def test_only_lease_owner_can_renew(redis_queue):
     queue, _, queue_name = redis_queue
     queue.enqueue("job-1", queue=queue_name)
@@ -80,7 +133,7 @@ def test_only_lease_owner_can_renew(redis_queue):
 
 
 def test_abandon_claim_returns_job_to_ready(redis_queue):
-    queue, _, queue_name = redis_queue
+    queue, client, queue_name = redis_queue
     queue.enqueue("job-1", queue=queue_name, priority=4)
     lease = queue.claim(queue_name, worker_id="worker-1")
     assert lease is not None
@@ -90,6 +143,7 @@ def test_abandon_claim_returns_job_to_ready(redis_queue):
     ) is True
     assert queue.queue_size(queue_name) == 1
     assert queue.inflight_size(queue_name) == 0
+    assert client.llen(f"job-notification:{queue_name}") == 1
 
 
 def test_expired_inflight_claim_returns_to_ready(redis_queue):
@@ -103,6 +157,7 @@ def test_expired_inflight_claim_returns_to_ready(redis_queue):
     assert queue.queue_size(queue_name) == 1
     assert queue.inflight_size(queue_name) == 0
     assert queue.lease_ttl("job-expired") == -2
+    assert client.llen(f"job-notification:{queue_name}") == 1
 
 
 def test_release_removes_completed_claim(redis_queue):

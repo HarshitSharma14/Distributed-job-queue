@@ -52,7 +52,7 @@ SQLAlchemy models, database sessions, migrations integration, and repositories f
 
 ### `queueing/`
 
-Redis queue operations: enqueue, priority ordering, atomic claim, leases, renewal, and requeue. Redis-specific behavior stays behind clear interfaces.
+Redis queue operations: sorted-set priority ordering, blocking-list wake-up notifications, atomic claims, leases, renewal, and requeue. Redis-specific behavior stays behind clear interfaces.
 
 ### `publisher/`
 
@@ -60,7 +60,7 @@ Transactional outbox publishing. Reads locked PostgreSQL outbox events, idempote
 
 ### `workers/`
 
-Worker process lifecycle. `runtime.py` owns registration and heartbeat database operations; `runner.py` owns the process loop, signal handling, and graceful shutdown. Long polling and job execution will be added here next.
+Worker process lifecycle. `runtime.py` owns registration and heartbeat operations, `handlers.py` maps durable job types to executable functions, and `consumer.py` performs the Redis-to-PostgreSQL claim handoff. `runner.py` owns process signals and graceful shutdown. Handler execution, lease renewal, and completion/failure reporting are the next layer.
 
 ### `scheduler/`
 

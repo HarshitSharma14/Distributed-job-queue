@@ -95,9 +95,9 @@ The queue stores ready jobs, supports priority ordering, claims, and leases.
 
 ## Decision
 
-### Choose: Redis sorted sets with atomic Lua scripts
+### Choose: Redis sorted sets, blocking lists, and atomic Lua scripts
 
-This provides priority queues and short-lived tokenized leases while keeping durable job state and recovery in PostgreSQL.
+Sorted sets provide priority ordering. Per-queue blocking lists act only as worker wake-up channels, allowing `BRPOP` to hold idle connections without repeated polling. Lua scripts atomically enqueue with a notification, claim jobs, and create short-lived tokenized leases. Durable job state and recovery remain in PostgreSQL.
 
 ---
 
@@ -284,10 +284,11 @@ API:                 FastAPI
 Language:            Python
 Database:            PostgreSQL
 Database Access:     SQLAlchemy
-Queue:               Redis sorted sets
+Queue:               Redis sorted sets + blocking notification lists
 Queue Atomicity:     Redis Lua scripts
 Workers:             Python processes
-Communication:       REST over HTTP
+Job Delivery:        Redis blocking wait + atomic Lua claim
+Control Communication: REST over HTTP
 Result Storage:      MinIO
 Deployment:          Docker Compose
 Testing:             Pytest

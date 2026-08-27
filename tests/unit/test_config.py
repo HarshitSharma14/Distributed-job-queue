@@ -11,6 +11,7 @@ def test_load_settings_uses_development_defaults():
     assert settings.environment == "development"
     assert settings.database_url.startswith("postgresql+")
     assert settings.job_lease_seconds == 60
+    assert settings.worker_long_poll_seconds == 20
     assert settings.max_attempts == 5
     assert settings.outbox_batch_size == 100
     assert settings.outbox_poll_interval_seconds == 1
@@ -20,6 +21,7 @@ def test_load_settings_parses_environment_values(monkeypatch):
     monkeypatch.setenv("APP_ENV", "test")
     monkeypatch.setenv("APP_DEBUG", "true")
     monkeypatch.setenv("JOB_LEASE_SECONDS", "90")
+    monkeypatch.setenv("WORKER_LONG_POLL_SECONDS", "15")
     monkeypatch.setenv("MAX_ATTEMPTS", "3")
 
     settings = load_settings()
@@ -27,6 +29,7 @@ def test_load_settings_parses_environment_values(monkeypatch):
     assert settings.environment == "test"
     assert settings.debug is True
     assert settings.job_lease_seconds == 90
+    assert settings.worker_long_poll_seconds == 15
     assert settings.max_attempts == 3
 
 

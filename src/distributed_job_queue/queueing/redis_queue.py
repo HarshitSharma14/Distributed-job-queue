@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 import uuid
 from dataclasses import dataclass
 
@@ -26,7 +27,18 @@ class RedisQueue:
     _INFLIGHT_PREFIX = "job-inflight"
     _INFLIGHT_SCORE_PREFIX = "job-inflight-score"
     _LEASE_PREFIX = "job-lease"
+    _NOTIFICATION_PREFIX = "job-notification"
     _SEQUENCE_SCALE = 1_000_000_000_000
+
+    _ENQUEUE_SCRIPT = """
+    local sequence = redis.call('INCR', KEYS[2])
+    local score = -tonumber(ARGV[2]) * tonumber(ARGV[3]) + sequence
+    local added = redis.call('ZADD', KEYS[1], 'NX', score, ARGV[1])
+    if added == 1 then
+        redis.call('LPUSH', KEYS[3], 'ready')
+    end
+    return added
+    """
 
     _CLAIM_SCRIPT = """
     local item = redis.call('ZPOPMIN', KEYS[1], 1)
@@ -46,6 +58,9 @@ class RedisQueue:
     redis.call('HSET', KEYS[3], job_id, original_score)
     redis.call('HSET', lease_key, 'worker_id', ARGV[1], 'queue', ARGV[2], 'token', ARGV[3])
     redis.call('EXPIRE', lease_key, ARGV[4])
+    if ARGV[5] == '1' then
+        redis.call('LPOP', KEYS[5])
+    end
     return {job_id, lease_key}
     """
 
@@ -79,7 +94,10 @@ class RedisQueue:
     end
     local original_score = redis.call('HGET', KEYS[4], ARGV[3])
     if original_score then
-        redis.call('ZADD', KEYS[2], 'NX', original_score, ARGV[3])
+        local added = redis.call('ZADD', KEYS[2], 'NX', original_score, ARGV[3])
+        if added == 1 then
+            redis.call('LPUSH', KEYS[5], 'ready')
+        end
     end
     redis.call('DEL', KEYS[1])
     redis.call('ZREM', KEYS[3], ARGV[3])
@@ -94,8 +112,11 @@ class RedisQueue:
     for _, job_id in ipairs(jobs) do
         local original_score = redis.call('HGET', KEYS[3], job_id)
         if original_score then
-            redis.call('ZADD', KEYS[1], 'NX', original_score, job_id)
-            table.insert(requeued, job_id)
+            local added = redis.call('ZADD', KEYS[1], 'NX', original_score, job_id)
+            if added == 1 then
+                redis.call('LPUSH', KEYS[5], 'ready')
+                table.insert(requeued, job_id)
+            end
         end
         redis.call('ZREM', KEYS[2], job_id)
         redis.call('HDEL', KEYS[3], job_id)
@@ -114,9 +135,18 @@ class RedisQueue:
             raise ValueError("queue must not be empty")
         if priority < 0:
             raise ValueError("priority must not be negative")
-        sequence = self.client.incr(self._sequence_key(queue))
-        score = -priority * self._SEQUENCE_SCALE + sequence
-        return bool(self.client.zadd(self._queue_key(queue), {job_id: score}, nx=True))
+        return bool(
+            self.client.eval(
+                self._ENQUEUE_SCRIPT,
+                3,
+                self._queue_key(queue),
+                self._sequence_key(queue),
+                self._notification_key(queue),
+                job_id,
+                priority,
+                self._SEQUENCE_SCALE,
+            )
+        )
 
     def queue_size(self, queue: str) -> int:
         return self.client.zcard(self._queue_key(queue))
@@ -125,7 +155,12 @@ class RedisQueue:
         return self.client.zcard(self._inflight_key(queue))
 
     def claim(
-        self, queue: str, *, worker_id: str, lease_seconds: int = 60
+        self,
+        queue: str,
+        *,
+        worker_id: str,
+        lease_seconds: int = 60,
+        notification_consumed: bool = False,
     ) -> JobLease | None:
         """Atomically move the highest-priority job from ready to in-flight."""
 
@@ -138,20 +173,58 @@ class RedisQueue:
         token = str(uuid.uuid4())
         result = self.client.eval(
             self._CLAIM_SCRIPT,
-            4,
+            5,
             self._queue_key(queue),
             self._inflight_key(queue),
             self._inflight_score_key(queue),
             self._LEASE_PREFIX + ":",
+            self._notification_key(queue),
             worker_id,
             queue,
             token,
             lease_seconds,
+            "0" if notification_consumed else "1",
         )
         if not result:
             return None
         job_id, _lease_key = result
         return JobLease(job_id=job_id, worker_id=worker_id, queue=queue, token=token)
+
+    def long_poll(
+        self,
+        queue: str,
+        *,
+        worker_id: str,
+        lease_seconds: int = 60,
+        wait_seconds: int = 20,
+    ) -> JobLease | None:
+        """Block in Redis until work arrives or the bounded timeout expires."""
+
+        if wait_seconds < 0:
+            raise ValueError("wait_seconds must not be negative")
+
+        lease = self.claim(queue, worker_id=worker_id, lease_seconds=lease_seconds)
+        if lease is not None or wait_seconds == 0:
+            return lease
+
+        deadline = time.monotonic() + wait_seconds
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return None
+            notification = self.client.brpop(
+                self._notification_key(queue), timeout=remaining
+            )
+            if notification is None:
+                return None
+            lease = self.claim(
+                queue,
+                worker_id=worker_id,
+                lease_seconds=lease_seconds,
+                notification_consumed=True,
+            )
+            if lease is not None:
+                return lease
 
     def renew_lease(
         self,
@@ -202,11 +275,12 @@ class RedisQueue:
 
         abandoned = self.client.eval(
             self._ABANDON_SCRIPT,
-            4,
+            5,
             self._lease_key(job_id),
             self._queue_key(queue),
             self._inflight_key(queue),
             self._inflight_score_key(queue),
+            self._notification_key(queue),
             worker_id,
             token,
             job_id,
@@ -221,11 +295,12 @@ class RedisQueue:
         return list(
             self.client.eval(
                 self._REQUEUE_EXPIRED_SCRIPT,
-                4,
+                5,
                 self._queue_key(queue),
                 self._inflight_key(queue),
                 self._inflight_score_key(queue),
                 self._LEASE_PREFIX + ":",
+                self._notification_key(queue),
                 limit,
             )
         )
@@ -247,3 +322,6 @@ class RedisQueue:
 
     def _lease_key(self, job_id: str) -> str:
         return f"{self._LEASE_PREFIX}:{job_id}"
+
+    def _notification_key(self, queue: str) -> str:
+        return f"{self._NOTIFICATION_PREFIX}:{queue}"

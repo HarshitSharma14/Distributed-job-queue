@@ -65,11 +65,11 @@ The codebase remains a modular monolith, but each runtime process has one respon
 | Job database         | PostgreSQL, Redis, document database | PostgreSQL is durable, transactional, and queryable                      | Requires a separate database    |
 | Queue and leases     | Redis, RabbitMQ, PostgreSQL          | Redis provides atomic operations, blocking reads, priorities, and leases | Less specialized than RabbitMQ  |
 | Data access          | SQLAlchemy, Django ORM, raw SQL      | SQLAlchemy gives explicit models and transactions                        | More setup than a framework ORM |
-| Worker communication | HTTP, WebSockets, gRPC               | HTTP is simple and easy to inspect                                       | Long polling uses open requests |
+| Worker job delivery  | Redis blocking wait, polling, push   | Blocking waits avoid repeated empty requests while preserving worker pull | Requires a wake-up channel beside the priority sorted set |
 
 ## Decision
 
-### Choose: FastAPI + PostgreSQL + Redis + SQLAlchemy + HTTP long polling
+### Choose: FastAPI + PostgreSQL + Redis + SQLAlchemy + Redis blocking waits
 
 PostgreSQL is the source of truth for job state. Redis handles ready queues and temporary leases. RabbitMQ, Kafka, and Temporal are not selected because they solve broader broker, event-streaming, and workflow problems than this task queue requires.
 
@@ -311,10 +311,10 @@ The claim operation must be atomic so two workers cannot own the same queue entr
 - **Pro:** simple and reliable
 - **Con:** creates unnecessary requests when the queue is empty
 
-### Option B: Push delivery
+### Option B: Redis blocking wait
 
-- **Pro:** efficient when work arrives
-- **Con:** more connection management and worker backpressure complexity
+- **Pro:** Redis holds idle connections and wakes workers when work arrives
+- **Con:** priority still requires a separate sorted set and atomic claim operation
 
 ### Option C: Streaming connection
 
@@ -323,9 +323,9 @@ The claim operation must be atomic so two workers cannot own the same queue entr
 
 ## Decision
 
-### Choose: HTTP long polling
+### Choose: Redis blocking wait with atomic priority claim
 
-Workers wait for work for a bounded period, then retry. This keeps workers independent, avoids busy polling, and remains easy to test and operate.
+Workers first try an immediate atomic claim. When the priority queue is empty, they block on a per-queue Redis notification list for a bounded period. Enqueueing atomically adds the job to the sorted set and emits a wake-up signal. A woken worker then runs the Lua claim against the sorted set. This avoids repeated empty-queue requests while preserving priority and leases.
 
 ## Worker endpoints
 
@@ -662,7 +662,8 @@ Code Structure:       Separate API, worker, scheduler, and recovery processes
 Core Entity:           Job with explicit lifecycle
 Queue Structure:       Named queues with priority
 Assignment:            Worker pull
-Communication:         HTTP long polling
+Job Delivery:          Redis blocking wait + atomic Lua claim
+Control Communication: REST over HTTP
 Delivery:              At-least-once
 State:                 PostgreSQL source of truth
 Worker Management:     Registration + heartbeats
