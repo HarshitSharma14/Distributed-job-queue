@@ -1,4 +1,6 @@
 import asyncio
+from datetime import datetime, timedelta, timezone
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -9,7 +11,8 @@ from distributed_job_queue.api.app import app
 from distributed_job_queue.api.dependencies import get_session
 from distributed_job_queue.domain.job import JobStatus
 from distributed_job_queue.persistence.database import engine
-from distributed_job_queue.persistence.models import Job, OutboxEvent
+from distributed_job_queue.persistence.models import Job, OutboxEvent, Worker
+from distributed_job_queue.persistence.repositories import JobRepository
 
 
 @pytest.fixture
@@ -31,15 +34,21 @@ def api_context():
         connection.close()
 
 
-def post_job(request_body: dict) -> httpx.Response:
+def api_request(
+    method: str, path: str, *, request_body: dict | None = None
+) -> httpx.Response:
     async def send_request() -> httpx.Response:
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
             transport=transport, base_url="http://testserver"
         ) as client:
-            return await client.post("/jobs", json=request_body)
+            return await client.request(method, path, json=request_body)
 
     return asyncio.run(send_request())
+
+
+def post_job(request_body: dict) -> httpx.Response:
+    return api_request("POST", "/jobs", request_body=request_body)
 
 
 def test_submit_job_creates_job_and_outbox_event_atomically(api_context):
@@ -111,5 +120,83 @@ def test_submit_job_rejects_invalid_requests(api_context, request_body):
     _ = api_context
 
     response = post_job(request_body)
+
+    assert response.status_code == 422
+
+
+def test_get_job_returns_authoritative_state(api_context):
+    _ = api_context
+    created = post_job(
+        {
+            "type": "generate_report",
+            "queue": "reports",
+            "payload": {"report_id": 42},
+        }
+    ).json()
+
+    response = api_request("GET", f"/jobs/{created['job_id']}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["job_id"] == created["job_id"]
+    assert body["status"] == JobStatus.CREATED.value
+    assert body["payload"] == {"report_id": 42}
+    assert body["attempt_count"] == 0
+    assert body["attempt_history"] == []
+    assert "lease_token" not in body
+
+
+def test_get_job_returns_ordered_attempt_history(api_context):
+    session = api_context
+    created = post_job(
+        {"type": "generate_report", "queue": "reports", "payload": {}}
+    ).json()
+    worker = Worker(id=f"detail-worker-{uuid4()}", capabilities=["generate_report"])
+    session.add(worker)
+    session.flush()
+    repository = JobRepository(session)
+    job = repository.get(created["job_id"])
+    assert job is not None
+    repository.transition(job, JobStatus.QUEUED)
+    lease_expires_at = datetime.now(timezone.utc) + timedelta(minutes=1)
+    repository.mark_running(
+        job.id,
+        worker_id=worker.id,
+        lease_token="private-token",
+        lease_expires_at=lease_expires_at,
+    )
+
+    response = api_request("GET", f"/jobs/{job.id}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == JobStatus.RUNNING.value
+    assert body["worker_id"] == worker.id
+    assert body["lease_expires_at"]
+    assert body["attempt_count"] == 1
+    assert len(body["attempt_history"]) == 1
+    attempt = body["attempt_history"][0]
+    assert attempt["attempt_number"] == 1
+    assert attempt["worker_id"] == worker.id
+    assert attempt["status"] == JobStatus.RUNNING.value
+    assert attempt["started_at"]
+    assert attempt["finished_at"] is None
+    assert attempt["error"] is None
+    assert "lease_token" not in body
+
+
+def test_get_job_returns_not_found_for_unknown_uuid(api_context):
+    _ = api_context
+
+    response = api_request("GET", f"/jobs/{uuid4()}")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Job not found"}
+
+
+def test_get_job_rejects_malformed_id(api_context):
+    _ = api_context
+
+    response = api_request("GET", "/jobs/not-a-uuid")
 
     assert response.status_code == 422

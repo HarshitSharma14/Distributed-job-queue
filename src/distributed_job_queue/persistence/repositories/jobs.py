@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import exists, select, update
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from distributed_job_queue.domain.job import JobStatus, transition_job
 from distributed_job_queue.persistence.models import Job, JobAttempt, OutboxEvent
@@ -49,6 +49,14 @@ class JobRepository:
 
     def get(self, job_id: str) -> Job | None:
         return self.session.get(Job, job_id)
+
+    def get_with_attempts(self, job_id: str) -> Job | None:
+        statement = (
+            select(Job)
+            .where(Job.id == job_id)
+            .options(selectinload(Job.attempts_history))
+        )
+        return self.session.scalars(statement).one_or_none()
 
     def list_by_status(self, status: JobStatus, *, limit: int = 100) -> list[Job]:
         statement = (

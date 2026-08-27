@@ -119,3 +119,11 @@ curl -X POST http://localhost:8000/jobs \
 ```
 
 The API returns `202 Accepted` with status `CREATED`. The outbox publisher asynchronously delivers the job ID to Redis and changes the durable status to `QUEUED`.
+
+Read the authoritative job state and execution history:
+
+```bash
+curl http://localhost:8000/jobs/<job_id>
+```
+
+The response includes the current status, active worker and lease expiry when applicable, result reference, error, and ordered attempt history. Internal fencing tokens are never exposed.

@@ -27,3 +27,32 @@ class JobCreateResponse(BaseModel):
     queue: str
     priority: int
     created_at: datetime
+
+
+class JobAttemptResponse(BaseModel):
+    attempt_number: int
+    worker_id: str
+    status: JobStatus
+    started_at: datetime
+    finished_at: datetime | None
+    error: dict[str, Any] | None
+
+
+class JobDetailResponse(BaseModel):
+    job_id: str
+    type: str
+    queue: str
+    payload: dict[str, Any]
+    priority: int
+    status: JobStatus
+    attempt_count: int
+    max_attempts: int
+    available_at: datetime
+    worker_id: str | None
+    lease_expires_at: datetime | None
+    result_ref: str | None
+    error: dict[str, Any] | None
+    created_at: datetime
+    updated_at: datetime
+    completed_at: datetime | None
+    attempt_history: list[JobAttemptResponse]
