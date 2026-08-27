@@ -60,7 +60,7 @@ Transactional outbox publishing. Reads locked PostgreSQL outbox events, idempote
 
 ### `workers/`
 
-Worker process lifecycle. `runtime.py` owns registration and heartbeat operations, `handlers.py` maps durable job types to executable functions, `consumer.py` performs the Redis-to-PostgreSQL claim handoff, and `executor.py` runs handlers with lease renewal and fenced finalization. `runner.py` owns process signals and graceful shutdown; wiring the consumer and executor into that process loop is next.
+Worker process lifecycle. `runtime.py` owns registration and heartbeat operations, `handlers.py` loads explicit handler modules and maps durable job types to functions, `consumer.py` performs the Redis-to-PostgreSQL claim handoff, and `executor.py` runs handlers with lease renewal and fenced finalization. `runner.py` combines these into the deployable process loop with queue subscriptions, independent heartbeats, error isolation, and graceful shutdown.
 
 ### `scheduler/`
 

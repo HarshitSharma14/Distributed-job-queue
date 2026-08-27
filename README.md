@@ -68,3 +68,30 @@ docker compose down -v
 ```
 
 Use the `-v` option only when local data can be discarded.
+
+## Worker handler modules
+
+A worker loads application code through modules that explicitly register handlers:
+
+```python
+from distributed_job_queue.workers import HandlerRegistry
+
+
+def generate_report(payload: dict) -> int:
+    return payload["report_id"]
+
+
+def register_handlers(registry: HandlerRegistry) -> None:
+    registry.register("generate_report", generate_report)
+```
+
+Run a worker subscribed to the matching queue:
+
+```bash
+job-worker \
+  --name report-worker-1 \
+  --queue reports \
+  --handler-module project.handlers
+```
+
+`--queue` and `--handler-module` may be repeated. If capabilities are not supplied explicitly, the worker advertises its registered job types.

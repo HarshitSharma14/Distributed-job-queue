@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 from collections.abc import Callable
 from typing import Any
 
@@ -14,6 +15,10 @@ class DuplicateJobHandler(ValueError):
 
 class UnknownJobHandler(LookupError):
     """Raised when no code is registered for a claimed job type."""
+
+
+class InvalidHandlerModule(ValueError):
+    """Raised when a handler module does not follow the registration contract."""
 
 
 class HandlerRegistry:
@@ -37,3 +42,21 @@ class HandlerRegistry:
 
     def handles(self, job_type: str) -> bool:
         return job_type in self._handlers
+
+    def job_types(self) -> tuple[str, ...]:
+        return tuple(sorted(self._handlers))
+
+
+def load_handler_modules(
+    registry: HandlerRegistry, module_names: list[str]
+) -> None:
+    """Load modules that expose a callable ``register_handlers(registry)``."""
+
+    for module_name in module_names:
+        module = importlib.import_module(module_name)
+        registrar = getattr(module, "register_handlers", None)
+        if not callable(registrar):
+            raise InvalidHandlerModule(
+                f"{module_name} must define register_handlers(registry)"
+            )
+        registrar(registry)

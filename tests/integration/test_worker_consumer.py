@@ -1,3 +1,4 @@
+import threading
 import time
 import uuid
 
@@ -18,6 +19,7 @@ from distributed_job_queue.workers import (
     WorkerConsumer,
     WorkerExecutor,
 )
+from distributed_job_queue.workers.runner import consume_loop
 
 
 @pytest.fixture
@@ -254,4 +256,36 @@ def test_executor_marks_job_failed_when_attempts_are_exhausted(consumer_context)
         job = session.get(Job, job_id)
         assert job is not None
         assert job.status == JobStatus.FAILED.value
+        assert job.attempts == 1
+
+
+def test_worker_loop_claims_and_executes_job_end_to_end(consumer_context):
+    queue, registry, _, queue_name, worker_id = consumer_context
+    registry.register("generate_report", lambda payload: payload["report_id"])
+    job_id = create_queued_job(queue_name)
+    queue.enqueue(job_id, queue=queue_name)
+    consumer = WorkerConsumer(queue, registry)
+    executor = WorkerExecutor(queue, lease_seconds=10)
+    stop = threading.Event()
+
+    class StopAfterExecution:
+        def execute(self, claimed):
+            outcome = executor.execute(claimed)
+            stop.set()
+            return outcome
+
+    consume_loop(
+        stop,
+        worker_id=worker_id,
+        queue_names=[queue_name],
+        consumer=consumer,
+        executor=StopAfterExecution(),
+        lease_seconds=10,
+        wait_seconds=0,
+    )
+
+    with SessionFactory() as session:
+        job = session.get(Job, job_id)
+        assert job is not None
+        assert job.status == JobStatus.COMPLETED.value
         assert job.attempts == 1
