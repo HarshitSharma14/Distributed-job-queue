@@ -31,11 +31,15 @@ class JobRepository:
         priority: int = 0,
         max_attempts: int = 5,
         available_at: datetime | None = None,
+        idempotency_key: str | None = None,
+        request_hash: str | None = None,
     ) -> Job:
         job = Job(
             type=job_type,
             queue=queue,
             payload=payload,
+            idempotency_key=idempotency_key,
+            request_hash=request_hash,
             priority=priority,
             status=JobStatus.CREATED.value,
             max_attempts=max_attempts,
@@ -49,6 +53,10 @@ class JobRepository:
 
     def get(self, job_id: str) -> Job | None:
         return self.session.get(Job, job_id)
+
+    def get_by_idempotency_key(self, idempotency_key: str) -> Job | None:
+        statement = select(Job).where(Job.idempotency_key == idempotency_key)
+        return self.session.scalars(statement).one_or_none()
 
     def get_with_attempts(self, job_id: str) -> Job | None:
         statement = (

@@ -109,6 +109,7 @@ Submit an immediate job:
 ```bash
 curl -X POST http://localhost:8000/jobs \
   -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: report-request-42' \
   -d '{
     "type": "generate_report",
     "queue": "reports",
@@ -119,6 +120,8 @@ curl -X POST http://localhost:8000/jobs \
 ```
 
 The API returns `202 Accepted` with status `CREATED`. The outbox publisher asynchronously delivers the job ID to Redis and changes the durable status to `QUEUED`.
+
+Retrying the same request with the same `Idempotency-Key` returns the original job ID and the header `Idempotency-Replayed: true`. Reusing a key with a different request returns `409 Conflict`. Without this header, every valid submission creates a new job.
 
 Read the authoritative job state and execution history:
 

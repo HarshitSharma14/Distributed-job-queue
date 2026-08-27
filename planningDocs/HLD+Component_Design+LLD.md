@@ -514,7 +514,7 @@ These flows describe the normal and failure paths the implementation must suppor
 ```text
 Client
   │
-  │ POST /jobs
+  │ POST /jobs + optional Idempotency-Key
   ▼
 API Service
   │
@@ -534,7 +534,7 @@ Outbox publisher
   └─ Change job state to QUEUED
 ```
 
-The operation must be safe to retry. An idempotency key prevents duplicate jobs after a client timeout.
+The operation is safe to retry when the caller supplies an idempotency key. The API stores a canonical request fingerprint with a unique key: identical retries return the original job, while using the same key for different work returns a conflict.
 
 ## 2. Job execution flow
 

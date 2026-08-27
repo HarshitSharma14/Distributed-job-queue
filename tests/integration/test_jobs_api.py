@@ -35,20 +35,35 @@ def api_context():
 
 
 def api_request(
-    method: str, path: str, *, request_body: dict | None = None
+    method: str,
+    path: str,
+    *,
+    request_body: dict | None = None,
+    headers: dict[str, str] | None = None,
 ) -> httpx.Response:
     async def send_request() -> httpx.Response:
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
             transport=transport, base_url="http://testserver"
         ) as client:
-            return await client.request(method, path, json=request_body)
+            return await client.request(
+                method, path, json=request_body, headers=headers
+            )
 
     return asyncio.run(send_request())
 
 
-def post_job(request_body: dict) -> httpx.Response:
-    return api_request("POST", "/jobs", request_body=request_body)
+def post_job(
+    request_body: dict, *, idempotency_key: str | None = None
+) -> httpx.Response:
+    headers = (
+        {"Idempotency-Key": idempotency_key}
+        if idempotency_key is not None
+        else None
+    )
+    return api_request(
+        "POST", "/jobs", request_body=request_body, headers=headers
+    )
 
 
 def test_submit_job_creates_job_and_outbox_event_atomically(api_context):
@@ -198,5 +213,65 @@ def test_get_job_rejects_malformed_id(api_context):
     _ = api_context
 
     response = api_request("GET", "/jobs/not-a-uuid")
+
+    assert response.status_code == 422
+
+
+def test_submit_job_replays_same_idempotent_request(api_context):
+    session = api_context
+    request_body = {
+        "type": "generate_report",
+        "queue": "reports",
+        "payload": {"report_id": 42},
+    }
+
+    first = post_job(request_body, idempotency_key="report-request-42")
+    second = post_job(request_body, idempotency_key="report-request-42")
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert first.json()["job_id"] == second.json()["job_id"]
+    assert "Idempotency-Replayed" not in first.headers
+    assert second.headers["Idempotency-Replayed"] == "true"
+    jobs = list(
+        session.scalars(
+            select(Job).where(Job.idempotency_key == "report-request-42")
+        )
+    )
+    assert len(jobs) == 1
+    events = list(
+        session.scalars(
+            select(OutboxEvent).where(OutboxEvent.job_id == jobs[0].id)
+        )
+    )
+    assert len(events) == 1
+
+
+def test_submit_job_rejects_idempotency_key_reuse_for_different_work(api_context):
+    _ = api_context
+    first = post_job(
+        {"type": "generate_report", "payload": {"report_id": 42}},
+        idempotency_key="report-conflict",
+    )
+
+    second = post_job(
+        {"type": "generate_report", "payload": {"report_id": 43}},
+        idempotency_key="report-conflict",
+    )
+
+    assert first.status_code == 202
+    assert second.status_code == 409
+    assert second.json() == {
+        "detail": "Idempotency-Key was already used for a different request"
+    }
+
+
+def test_submit_job_rejects_invalid_idempotency_key(api_context):
+    _ = api_context
+
+    response = post_job(
+        {"type": "send_email", "payload": {}},
+        idempotency_key="spaces are not allowed",
+    )
 
     assert response.status_code == 422

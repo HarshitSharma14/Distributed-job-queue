@@ -5,8 +5,8 @@ This is the working checklist for implementation. We complete and verify each it
 ## Current focus
 
 - **Current phase:** Phase 5 — API service
-- **Next step:** Add idempotency-key handling for safe submission retries
-- **Current milestone:** Job detail API with ordered attempt history implemented; 54 tests pass
+- **Next step:** Implement authenticated worker control endpoints or formally keep worker control in-process
+- **Current milestone:** Concurrent-safe submission idempotency implemented; 58 tests pass
 
 ## Phase 1 — Project foundation
 
@@ -66,7 +66,7 @@ This is the working checklist for implementation. We complete and verify each it
 - [x] Implement `GET /jobs/{job_id}`
 - [ ] Implement worker registration and heartbeat endpoints
 - [ ] Implement job completion and failure endpoints
-- [ ] Add request validation and idempotency handling
+- [x] Add request validation and idempotency handling
 - [ ] Add API tests
 
 ## Phase 6 — Reliability
@@ -134,3 +134,4 @@ This is the working checklist for implementation. We complete and verify each it
 | 2026-08-28 | Worker runtime completed | Added explicit handler-module loading, independent heartbeats, queue subscription rotation, blocking claim/execution loop, graceful shutdown, and end-to-end runtime coverage |
 | 2026-08-28 | Job submission API added | Added validated `POST /jobs`, request-scoped transactions, atomic job/outbox persistence, deployable API runner, and HTTP integration tests |
 | 2026-08-28 | Job detail API added | Added UUID-validated lookup, authoritative lifecycle fields, ordered attempt history, internal-token filtering, and not-found coverage |
+| 2026-08-28 | Submission idempotency added | Added durable idempotency keys, canonical request fingerprints, conflict detection, replay headers, a unique database constraint, and concurrent-race coverage |
