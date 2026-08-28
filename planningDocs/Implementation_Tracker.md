@@ -5,8 +5,8 @@ This is the working checklist for implementation. We complete and verify each it
 ## Current focus
 
 - **Current phase:** Phase 7.5 — Role-scoped dashboard product
-- **Next step:** Add Producer API keys and apply ownership authorization to job routes
-- **Current milestone:** Human users authenticate with Argon2id passwords and revocable PostgreSQL sessions protected by secure cookies and CSRF tokens; 119 tests pass
+- **Next step:** Add Publisher Job Type creation and management APIs
+- **Current milestone:** Producer API keys protect Job Type-based submission, while Admin, Publisher, and Producer ownership rules protect job details; 125 tests pass
 
 ## Phase 1 — Project foundation
 
@@ -104,8 +104,9 @@ This is the working checklist for implementation. We complete and verify each it
 - [x] Define Admin, Publisher, Producer, and Worker visibility and ownership
 - [x] Add identity and job-type persistence models
 - [x] Add human authentication and authenticated request identity
-- [ ] Add Producer API keys
-- [ ] Apply role and ownership authorization to product APIs
+- [x] Add Producer API keys
+- [x] Apply role and ownership authorization to job submission and detail APIs
+- [ ] Apply role and ownership authorization to remaining product APIs
 - [ ] Replace the shared Worker Gateway token with per-agent credentials
 - [ ] Add publisher-scoped job and analytics APIs
 - [ ] Add producer-scoped job detail and history APIs
@@ -177,3 +178,4 @@ This is the working checklist for implementation. We complete and verify each it
 | 2026-08-29 | Dashboard visibility model locked | Defined immutable Publisher and Producer job ownership, Worker attempt ownership, global Admin access, role-scoped metrics, and explicit secret and payload boundaries |
 | 2026-08-29 | Identity and ownership persistence added | Added users, multi-role assignments, versioned job types, Producer-scoped idempotency, database-enforced Publisher ownership, immutable job ownership snapshots, Worker Agent ownership, migrations `0006`–`0007`, and integration coverage; all 113 tests pass with no Alembic drift |
 | 2026-08-29 | Human authentication added | Added Argon2id password hashes, revocable PostgreSQL browser sessions, secure session cookies, double-submit CSRF validation, login/logout/current-user APIs, a user-creation CLI, migration `0008`, and authentication coverage; all 119 tests pass with no Alembic drift |
+| 2026-08-29 | Producer authentication and job authorization added | Added hashed, scoped, expiring, revocable Producer API keys; one-time key disclosure; Job Type-based submissions; Producer-scoped idempotency; Admin, Publisher, and Producer job visibility; migration `0009`; and integration coverage; all 125 tests pass with no Alembic drift |

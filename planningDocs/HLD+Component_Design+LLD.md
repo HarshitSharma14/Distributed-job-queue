@@ -566,7 +566,7 @@ Admin     ─manages────────────────────
 
 Each job stores immutable `publisher_id`, `producer_id`, and `job_type_id` ownership references at submission. Each attempt stores its `worker_id`, and every registered Worker Agent stores its owning `owner_user_id`. Keeping an ownership snapshot on the job preserves historical authorization and auditability if a job type later changes ownership.
 
-PostgreSQL enforces that the referenced Job Type belongs to the recorded Publisher and rejects changes to a job's three ownership fields after insertion. Idempotency keys are unique per Producer, so separate Producers may safely use the same client-generated key. Until Producer authentication is applied to job routes, those compatibility routes use an explicit bootstrap system user and legacy Job Type.
+PostgreSQL enforces that the referenced Job Type belongs to the recorded Publisher and rejects changes to a job's three ownership fields after insertion. Idempotency keys are unique per Producer, so separate Producers may safely use the same client-generated key. Producer-facing job routes require an authenticated browser session or scoped Producer API key; the bootstrap identity remains only for internal compatibility paths.
 
 | Actor | Can see | Cannot see |
 |---|---|---|
@@ -606,7 +606,9 @@ Users log in with email and password. Passwords are stored only as Argon2id hash
 
 The raw session token is sent in a `Secure`, `HttpOnly`, `SameSite=Lax` cookie. State-changing dashboard requests must also send the CSRF token from its readable cookie in the `X-CSRF-Token` header. Logout revokes the database session and clears both cookies. Expired sessions, revoked sessions, disabled users, and invalid passwords are rejected with generic errors.
 
-Browser sessions authenticate humans only. Producer API keys, Worker Agent credentials, the metrics token, and internal process credentials remain separate credential classes with narrower permissions.
+Browser sessions authenticate humans only. Producer applications use independent opaque API keys with `jobs:submit` and `jobs:read-own` scopes. PostgreSQL stores only each key's SHA-256 hash, prefix, owner, scopes, expiry, usage time, and revocation time. The raw key is returned once when created, and revocation takes effect immediately.
+
+Worker Agent credentials, the metrics token, and internal process credentials remain separate credential classes with narrower permissions.
 
 ---
 
@@ -619,11 +621,13 @@ These flows describe the normal and failure paths the implementation must suppor
 ```text
 Client
   │
-  │ POST /jobs + optional Idempotency-Key
+  │ POST /jobs + Producer credential + optional Idempotency-Key
   ▼
 API Service
   │
-  ├─ Validate request
+  ├─ Authenticate Producer and validate scope/CSRF
+  ├─ Load active Job Type by job_type_id
+  ├─ Derive Publisher, handler type, and queue from the Job Type
   └─ PostgreSQL transaction
        ├─ Create job as CREATED
        └─ Create JOB_READY outbox event
@@ -639,7 +643,7 @@ Outbox publisher
   └─ Change job state to QUEUED
 ```
 
-The operation is safe to retry when the caller supplies an idempotency key. The API stores a canonical request fingerprint with a unique key: identical retries return the original job, while using the same key for different work returns a conflict.
+The Producer supplies a `job_type_id`, payload, priority, and optional retry limit; it cannot choose an arbitrary handler name or queue. The operation is safe to retry when the caller supplies an idempotency key. The API stores a canonical request fingerprint with a Producer-scoped unique key: identical retries return the original job, while using the same key for different work returns a conflict.
 
 ## 2. Job execution flow
 

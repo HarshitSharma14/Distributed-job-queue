@@ -36,7 +36,7 @@ def test_metrics_endpoint_requires_separate_bearer_token():
 def test_metrics_endpoint_exposes_platform_and_template_labeled_http_metrics():
     job_id = str(uuid4())
     not_found = request(f"/jobs/{job_id}")
-    assert not_found.status_code == 404
+    assert not_found.status_code == 401
 
     response = request("/metrics", token="integration-metrics-token")
 

@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Annotated, Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from distributed_job_queue.domain.job import JobStatus
 from distributed_job_queue.domain.worker import WorkerStatus
@@ -16,10 +16,9 @@ WorkerCapability = Annotated[
 
 
 class JobCreateRequest(BaseModel):
-    type: str = Field(min_length=1, max_length=100, pattern=NAME_PATTERN)
-    queue: str = Field(
-        default="default", min_length=1, max_length=100, pattern=NAME_PATTERN
-    )
+    model_config = ConfigDict(extra="forbid")
+
+    job_type_id: UUID
     payload: dict[str, Any] = Field(default_factory=dict)
     priority: int = Field(default=0, ge=0, le=1_000_000)
     max_attempts: int | None = Field(default=None, ge=1, le=100)
@@ -27,6 +26,7 @@ class JobCreateRequest(BaseModel):
 
 class JobCreateResponse(BaseModel):
     job_id: str
+    job_type_id: str
     status: JobStatus
     type: str
     queue: str
@@ -45,6 +45,9 @@ class JobAttemptResponse(BaseModel):
 
 class JobDetailResponse(BaseModel):
     job_id: str
+    job_type_id: str
+    publisher_id: str
+    producer_id: str
     type: str
     queue: str
     payload: dict[str, Any]

@@ -8,6 +8,10 @@ from fastapi import APIRouter, Depends, Header, Response, status
 from sqlalchemy.orm import Session
 
 from distributed_job_queue.api.dependencies import get_session
+from distributed_job_queue.api.auth_dependencies import (
+    require_job_read_principal,
+    require_job_submission_principal,
+)
 from distributed_job_queue.api.errors import APIError
 from distributed_job_queue.api.schemas import (
     JobCreateRequest,
@@ -16,9 +20,11 @@ from distributed_job_queue.api.schemas import (
 )
 from distributed_job_queue.api.services import (
     IdempotencyConflict,
+    JobTypeUnavailable,
     get_job_detail,
     submit_job,
 )
+from distributed_job_queue.auth.service import AuthenticatedPrincipal
 from distributed_job_queue.common.metrics import JOBS_SUBMITTED
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -30,6 +36,9 @@ def create_job(
     request: JobCreateRequest,
     response: Response,
     session: Annotated[Session, Depends(get_session)],
+    principal: Annotated[
+        AuthenticatedPrincipal, Depends(require_job_submission_principal)
+    ],
     idempotency_key: Annotated[
         str | None,
         Header(
@@ -42,12 +51,21 @@ def create_job(
 ) -> JobCreateResponse:
     try:
         submission = submit_job(
-            session, request, idempotency_key=idempotency_key
+            session,
+            request,
+            producer_id=principal.user_id,
+            idempotency_key=idempotency_key,
         )
     except IdempotencyConflict as exc:
         raise APIError(
             status_code=status.HTTP_409_CONFLICT,
             code="IDEMPOTENCY_CONFLICT",
+            message=str(exc),
+        ) from exc
+    except JobTypeUnavailable as exc:
+        raise APIError(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="JOB_TYPE_NOT_FOUND",
             message=str(exc),
         ) from exc
     if submission.replayed:
@@ -72,8 +90,11 @@ def create_job(
 def get_job(
     job_id: UUID,
     session: Annotated[Session, Depends(get_session)],
+    principal: Annotated[
+        AuthenticatedPrincipal, Depends(require_job_read_principal)
+    ],
 ) -> JobDetailResponse:
-    detail = get_job_detail(session, str(job_id))
+    detail = get_job_detail(session, str(job_id), principal=principal)
     if detail is None:
         raise APIError(
             status_code=status.HTTP_404_NOT_FOUND,

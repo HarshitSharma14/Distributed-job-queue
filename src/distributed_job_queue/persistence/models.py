@@ -61,6 +61,9 @@ class User(Base):
     browser_sessions: Mapped[list[BrowserSession]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    producer_credentials: Mapped[list[ProducerCredential]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
 
 
 class BrowserSession(Base):
@@ -88,6 +91,38 @@ class BrowserSession(Base):
     )
 
     user: Mapped[User] = relationship(back_populates="browser_sessions")
+
+
+class ProducerCredential(Base):
+    __tablename__ = "producer_credentials"
+    __table_args__ = (
+        UniqueConstraint("key_hash", name="uq_producer_credentials_key_hash"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    key_prefix: Mapped[str] = mapped_column(String(20), nullable=False)
+    key_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    scopes: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    user: Mapped[User] = relationship(back_populates="producer_credentials")
 
 
 class UserRoleAssignment(Base):

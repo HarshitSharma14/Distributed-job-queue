@@ -42,11 +42,11 @@ Main application package. Production code lives here.
 
 ### `api/`
 
-FastAPI application and process runner. Authentication routes expose login, logout, and current-user identity, while authentication dependencies resolve revocable browser sessions and enforce CSRF protection. `schemas.py` defines public and worker-gateway contracts, while `dependencies.py` owns request-scoped transactions, internal Redis construction, and the temporary worker-token boundary. `services.py` coordinates producer-facing job operations. `worker_gateway_services.py` owns worker presence, claim handoff, lease renewal, and idempotent terminal reporting. `routes.py` exposes producer-facing HTTP operations; `worker_gateway_routes.py` exposes the complete worker control protocol: registration, heartbeat, claim, renewal, completion, and failure. Business rules do not belong in route handlers.
+FastAPI application and process runner. Authentication routes expose login, logout, current-user identity, and Producer API-key lifecycle operations. Authentication dependencies resolve revocable browser sessions or scoped Producer credentials, enforce CSRF for browser writes, and create the request principal used by ownership checks. `schemas.py` defines public and worker-gateway contracts, while `dependencies.py` owns request-scoped transactions, internal Redis construction, and the temporary worker-token boundary. `services.py` coordinates Producer-authenticated, Job Type-based submission and ownership-filtered job details. `worker_gateway_services.py` owns worker presence, claim handoff, lease renewal, and idempotent terminal reporting. `routes.py` exposes producer-facing HTTP operations; `worker_gateway_routes.py` exposes the complete worker control protocol: registration, heartbeat, claim, renewal, completion, and failure. Business rules do not belong in route handlers.
 
 ### `auth/`
 
-Human authentication primitives and services. Passwords use Argon2id, opaque session and CSRF tokens are generated cryptographically, and only token hashes are persisted. The CLI creates initial users without placing passwords in shell history.
+Human and Producer authentication primitives and services. Passwords use Argon2id; opaque session, CSRF, and Producer API tokens are generated cryptographically; and only token hashes are persisted. Producer keys are scoped, expiring, revocable, and disclosed only once. The CLI creates initial users without placing passwords in shell history.
 
 ### `domain/`
 
@@ -54,7 +54,7 @@ Core concepts and rules: job entities, statuses, state transitions, user roles, 
 
 ### `persistence/`
 
-SQLAlchemy models, database sessions, migrations integration, and repositories for users, role assignments, versioned job types, jobs, attempts, workers, results, and durable dead-letter records. Job rows retain immutable `job_type_id`, `publisher_id`, and `producer_id` ownership snapshots, while each Worker Agent references its owning user. Producer-scoped idempotency and the Job Type-to-Publisher relationship are enforced by PostgreSQL.
+SQLAlchemy models, database sessions, migrations integration, and repositories for users, role assignments, browser sessions, Producer credentials, versioned job types, jobs, attempts, workers, results, and durable dead-letter records. Job rows retain immutable `job_type_id`, `publisher_id`, and `producer_id` ownership snapshots, while each Worker Agent references its owning user. Producer-scoped idempotency and the Job Type-to-Publisher relationship are enforced by PostgreSQL.
 
 ### `queueing/`
 

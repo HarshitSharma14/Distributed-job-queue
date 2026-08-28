@@ -13,14 +13,20 @@ from distributed_job_queue.api.schemas import (
     JobCreateResponse,
     JobDetailResponse,
 )
+from distributed_job_queue.auth.service import AuthenticatedPrincipal
 from distributed_job_queue.common.config import load_settings
+from distributed_job_queue.domain.identity import JobTypeStatus, UserRole
 from distributed_job_queue.domain.job import JobStatus
 from distributed_job_queue.persistence.models import Job
-from distributed_job_queue.persistence.repositories import JobRepository
+from distributed_job_queue.persistence.repositories import IdentityRepository, JobRepository
 
 
 class IdempotencyConflict(ValueError):
     """Raised when one idempotency key is reused for different work."""
+
+
+class JobTypeUnavailable(ValueError):
+    """Raised when a Producer references a missing or disabled Job Type."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,6 +39,7 @@ def submit_job(
     session: Session,
     request: JobCreateRequest,
     *,
+    producer_id: str,
     idempotency_key: str | None = None,
 ) -> JobSubmission:
     """Create a durable job and its publication event in one transaction."""
@@ -41,16 +48,24 @@ def submit_job(
     max_attempts = request.max_attempts or settings.max_attempts
     request_hash = _request_hash(request, max_attempts=max_attempts)
     repository = JobRepository(session)
+    job_type = IdentityRepository(session).get_job_type(str(request.job_type_id))
+    if job_type is None or job_type.status != JobTypeStatus.ACTIVE.value:
+        raise JobTypeUnavailable("Job type is not available")
 
     if idempotency_key is not None:
-        existing = repository.get_by_idempotency_key(idempotency_key)
+        existing = repository.get_by_idempotency_key(
+            idempotency_key, producer_id=producer_id
+        )
         if existing is not None:
             return _replay(existing, request_hash=request_hash)
 
     if idempotency_key is None:
         job = repository.create(
-            job_type=request.type,
-            queue=request.queue,
+            job_type=job_type.name,
+            job_type_id=job_type.id,
+            publisher_id=job_type.publisher_id,
+            producer_id=producer_id,
+            queue=job_type.queue,
             payload=request.payload,
             priority=request.priority,
             max_attempts=max_attempts,
@@ -59,8 +74,11 @@ def submit_job(
         try:
             with session.begin_nested():
                 job = repository.create(
-                    job_type=request.type,
-                    queue=request.queue,
+                    job_type=job_type.name,
+                    job_type_id=job_type.id,
+                    publisher_id=job_type.publisher_id,
+                    producer_id=producer_id,
+                    queue=job_type.queue,
                     payload=request.payload,
                     priority=request.priority,
                     max_attempts=max_attempts,
@@ -68,7 +86,9 @@ def submit_job(
                     request_hash=request_hash,
                 )
         except IntegrityError:
-            existing = repository.get_by_idempotency_key(idempotency_key)
+            existing = repository.get_by_idempotency_key(
+                idempotency_key, producer_id=producer_id
+            )
             if existing is None:
                 raise
             return _replay(existing, request_hash=request_hash)
@@ -99,6 +119,7 @@ def _replay(job: Job, *, request_hash: str) -> JobSubmission:
 def _create_response(job: Job) -> JobCreateResponse:
     return JobCreateResponse(
         job_id=job.id,
+        job_type_id=job.job_type_id,
         status=JobStatus(job.status),
         type=job.type,
         queue=job.queue,
@@ -107,15 +128,33 @@ def _create_response(job: Job) -> JobCreateResponse:
     )
 
 
-def get_job_detail(session: Session, job_id: str) -> JobDetailResponse | None:
+def get_job_detail(
+    session: Session,
+    job_id: str,
+    *,
+    principal: AuthenticatedPrincipal,
+) -> JobDetailResponse | None:
     """Return authoritative state and ordered execution history."""
 
     job = JobRepository(session).get_with_attempts(job_id)
     if job is None:
         return None
+    if UserRole.ADMIN not in principal.roles:
+        allowed = (
+            UserRole.PRODUCER in principal.roles
+            and job.producer_id == principal.user_id
+        ) or (
+            UserRole.PUBLISHER in principal.roles
+            and job.publisher_id == principal.user_id
+        )
+        if not allowed:
+            return None
     attempts = sorted(job.attempts_history, key=lambda attempt: attempt.attempt_number)
     return JobDetailResponse(
         job_id=job.id,
+        job_type_id=job.job_type_id,
+        publisher_id=job.publisher_id,
+        producer_id=job.producer_id,
         type=job.type,
         queue=job.queue,
         payload=job.payload,

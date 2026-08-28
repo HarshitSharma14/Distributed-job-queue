@@ -65,3 +65,6 @@ class IdentityRepository:
         self.session.add(job_type)
         self.session.flush()
         return job_type
+
+    def get_job_type(self, job_type_id: str) -> JobType | None:
+        return self.session.get(JobType, job_type_id)

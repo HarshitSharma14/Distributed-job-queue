@@ -6,6 +6,7 @@ from sqlalchemy import delete, select
 
 from distributed_job_queue.api.schemas import JobCreateRequest
 from distributed_job_queue.api.services import submit_job
+from distributed_job_queue.domain.identity import BOOTSTRAP_JOB_TYPE_ID, BOOTSTRAP_USER_ID
 from distributed_job_queue.persistence.database import SessionFactory
 from distributed_job_queue.persistence.models import Job
 
@@ -13,14 +14,16 @@ from distributed_job_queue.persistence.models import Job
 def test_concurrent_submissions_with_same_key_create_one_job():
     idempotency_key = f"concurrent-{uuid4()}"
     request = JobCreateRequest(
-        type="generate_report",
-        queue="reports",
+        job_type_id=BOOTSTRAP_JOB_TYPE_ID,
         payload={"report_id": 42},
     )
     first_session = SessionFactory()
     first_transaction = first_session.begin()
     first = submit_job(
-        first_session, request, idempotency_key=idempotency_key
+        first_session,
+        request,
+        producer_id=BOOTSTRAP_USER_ID,
+        idempotency_key=idempotency_key,
     )
     second_result = []
     second_error = []
@@ -30,7 +33,10 @@ def test_concurrent_submissions_with_same_key_create_one_job():
             with SessionFactory.begin() as session:
                 second_result.append(
                     submit_job(
-                        session, request, idempotency_key=idempotency_key
+                        session,
+                        request,
+                        producer_id=BOOTSTRAP_USER_ID,
+                        idempotency_key=idempotency_key,
                     )
                 )
         except Exception as exc:

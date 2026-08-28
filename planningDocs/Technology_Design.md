@@ -305,6 +305,7 @@ Metrics Storage:     Grafana Cloud Free or local Prometheus
 Dashboard Analytics: PostgreSQL exact data + Prometheus operational trends
 Password Hashing:    Argon2id via argon2-cffi
 Browser Auth:        Opaque PostgreSQL sessions + secure cookies + CSRF tokens
+Producer Auth:       Hashed, scoped, expiring, revocable opaque API keys
 ```
 
 ## Final architecture with technologies

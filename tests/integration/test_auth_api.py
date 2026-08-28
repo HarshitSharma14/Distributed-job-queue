@@ -17,7 +17,7 @@ from distributed_job_queue.auth.security import (
 )
 from distributed_job_queue.domain.identity import UserRole, UserStatus
 from distributed_job_queue.persistence.database import engine
-from distributed_job_queue.persistence.models import BrowserSession
+from distributed_job_queue.persistence.models import BrowserSession, ProducerCredential
 from distributed_job_queue.persistence.repositories import IdentityRepository
 
 
@@ -88,6 +88,41 @@ def test_login_identity_csrf_logout_and_revocation(auth_context):
             me_response = await client.get("/auth/me")
             assert me_response.status_code == 200
             assert me_response.json()["user_id"] == user.id
+
+            created_key = await client.post(
+                "/auth/api-keys",
+                headers={CSRF_HEADER_NAME: csrf_token},
+                json={"name": "Local producer", "expires_in_days": 30},
+            )
+            assert created_key.status_code == 200
+            key_body = created_key.json()
+            assert key_body["key"].startswith("djq_prod_")
+            assert key_body["scopes"] == ["jobs:read-own", "jobs:submit"]
+            stored_key = session.scalar(select(ProducerCredential))
+            assert stored_key is not None
+            assert stored_key.key_hash == token_hash(key_body["key"])
+            assert stored_key.key_hash != key_body["key"]
+
+            listed_keys = await client.get("/auth/api-keys")
+            assert listed_keys.status_code == 200
+            assert listed_keys.json()[0]["credential_id"] == key_body["credential_id"]
+            assert "key" not in listed_keys.json()[0]
+
+            api_key_headers = {"Authorization": f"Bearer {key_body['key']}"}
+            authenticated_key = await client.get(
+                f"/jobs/{uuid4()}", headers=api_key_headers
+            )
+            assert authenticated_key.status_code == 404
+
+            revoked_key = await client.delete(
+                f"/auth/api-keys/{key_body['credential_id']}",
+                headers={CSRF_HEADER_NAME: csrf_token},
+            )
+            assert revoked_key.status_code == 204
+            rejected_key = await client.get(
+                f"/jobs/{uuid4()}", headers=api_key_headers
+            )
+            assert rejected_key.status_code == 401
 
             rejected_logout = await client.post("/auth/logout")
             assert rejected_logout.status_code == 403
