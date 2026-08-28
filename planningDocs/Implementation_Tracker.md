@@ -5,8 +5,8 @@ This is the working checklist for implementation. We complete and verify each it
 ## Current focus
 
 - **Current phase:** Phase 6 — Reliability
-- **Next step:** Implement exponential retry backoff with jitter and schedule `RETRY_WAIT` jobs
-- **Current milestone:** Worker runtime communicates only through the Worker Gateway and has no PostgreSQL or Redis access; 85 tests pass
+- **Next step:** Implement the recovery monitor for expired `RUNNING` job leases
+- **Current milestone:** Failed jobs use durable exponential backoff with jitter, and the scheduler safely releases due retries through the transactional outbox; 95 tests pass
 
 ## Phase 1 — Project foundation
 
@@ -83,9 +83,9 @@ This is the working checklist for implementation. We complete and verify each it
 
 ## Phase 6 — Reliability
 
-- [ ] Implement exponential backoff with jitter
+- [x] Implement exponential backoff with jitter
 - [x] Implement the `RETRY_WAIT` state transition
-- [ ] Implement the scheduler
+- [x] Implement the scheduler
 - [ ] Implement the recovery monitor
 - [ ] Implement dead-letter handling
 - [ ] Test worker crashes and expired leases
@@ -153,3 +153,4 @@ This is the working checklist for implementation. We complete and verify each it
 | 2026-08-28 | Worker Gateway lease renewal added | Added token-fenced renewal across authoritative PostgreSQL state and temporary Redis coordination, with stale-token and missing-lease rejection; all 76 tests pass |
 | 2026-08-28 | Worker Gateway finalization added | Added migration `0004`, durable attempt fencing tokens, idempotent completion/failure replay, result references, retry/terminal failure selection, and best-effort Redis cleanup; all 81 tests pass |
 | 2026-08-28 | Worker runtime isolated from infrastructure | Added the HTTP Gateway client and refactored registration, heartbeat, claim, renewal, completion, and failure so worker code imports neither Redis nor PostgreSQL; all 85 tests pass |
+| 2026-08-28 | Durable retry scheduling added | Added capped exponential backoff with jitter, persisted retry availability, concurrent-safe scheduler batches, transactional outbox release, process configuration, and retry integration tests; all 95 tests pass |

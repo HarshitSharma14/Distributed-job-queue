@@ -18,6 +18,7 @@ from distributed_job_queue.api.schemas import (
 )
 from distributed_job_queue.common.config import load_settings
 from distributed_job_queue.domain.job import JobStatus
+from distributed_job_queue.domain.retry import retry_available_at
 from distributed_job_queue.domain.worker import WorkerStatus
 from distributed_job_queue.persistence.repositories import (
     ConcurrentJobUpdate,
@@ -254,6 +255,7 @@ def fail_gateway_job(
 ) -> WorkerFinalizationResponse:
     """Durably fail one fenced attempt and select retry or terminal state."""
 
+    settings = load_settings()
     lease_token = str(request.lease_token)
     error = request.error.model_dump(exclude_none=True)
     try:
@@ -267,12 +269,20 @@ def fail_gateway_job(
                 JobStatus.RETRY_WAIT.value,
                 JobStatus.FAILED.value,
             }
+            now = datetime.now(timezone.utc)
+            retry_at = retry_available_at(
+                now,
+                existing.attempts,
+                base_delay_seconds=settings.retry_base_delay_seconds,
+                max_delay_seconds=settings.retry_max_delay_seconds,
+            )
             job = repository.fail_execution(
                 job_id,
                 worker_id=request.worker_id,
                 lease_token=lease_token,
                 error=error,
-                now=datetime.now(timezone.utc),
+                now=now,
+                retry_at=retry_at,
             )
             response = WorkerFinalizationResponse(
                 job_id=job.id,

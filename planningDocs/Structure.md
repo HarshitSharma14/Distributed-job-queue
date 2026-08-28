@@ -44,7 +44,7 @@ FastAPI application and process runner. `schemas.py` defines public and worker-g
 
 ### `domain/`
 
-Core concepts and rules: job entities, statuses, state transitions, retry policy, and worker capabilities. This package should remain independent of HTTP, Redis, and database details.
+Core concepts and rules: job entities, statuses, state transitions, worker capabilities, and capped exponential retry timing with jitter. This package remains independent of HTTP, Redis, and database details.
 
 ### `persistence/`
 
@@ -64,7 +64,7 @@ Worker execution-agent lifecycle with no infrastructure access. `gateway_client.
 
 ### `scheduler/`
 
-Finds delayed and retryable jobs that are ready, then publishes them to the appropriate queue.
+Releases durable retries when their PostgreSQL `available_at` time arrives. It locks due `RETRY_WAIT` rows with `SKIP LOCKED`, changes them to `QUEUED`, and creates transactional outbox events. The separate publisher performs Redis delivery.
 
 ### `recovery/`
 

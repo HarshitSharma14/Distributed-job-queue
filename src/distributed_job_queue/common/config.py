@@ -57,6 +57,8 @@ class Settings:
     job_lease_seconds: int
     retry_base_delay_seconds: int
     retry_max_delay_seconds: int
+    scheduler_batch_size: int
+    scheduler_poll_interval_seconds: int
     max_attempts: int
     outbox_batch_size: int
     outbox_poll_interval_seconds: int
@@ -103,6 +105,10 @@ def load_settings() -> Settings:
         job_lease_seconds=_get_int("JOB_LEASE_SECONDS", 60, minimum=1),
         retry_base_delay_seconds=_get_int("RETRY_BASE_DELAY_SECONDS", 5, minimum=0),
         retry_max_delay_seconds=_get_int("RETRY_MAX_DELAY_SECONDS", 300, minimum=0),
+        scheduler_batch_size=_get_int("SCHEDULER_BATCH_SIZE", 100, minimum=1),
+        scheduler_poll_interval_seconds=_get_int(
+            "SCHEDULER_POLL_INTERVAL_SECONDS", 1, minimum=1
+        ),
         max_attempts=_get_int("MAX_ATTEMPTS", 5, minimum=1),
         outbox_batch_size=_get_int("OUTBOX_BATCH_SIZE", 100, minimum=1),
         outbox_poll_interval_seconds=_get_int(

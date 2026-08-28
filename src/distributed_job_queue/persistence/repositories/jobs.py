@@ -199,6 +199,7 @@ class JobRepository:
         lease_token: str,
         error: dict[str, Any],
         now: datetime,
+        retry_at: datetime | None = None,
     ) -> Job:
         """Record a failed attempt while rejecting stale workers."""
 
@@ -228,8 +229,12 @@ class JobRepository:
             else JobStatus.FAILED
         )
         transition_job(JobStatus.RUNNING, target)
+        if target == JobStatus.RETRY_WAIT and retry_at is None:
+            raise ValueError("retry_at is required when attempts remain")
         job.status = target.value
         job.error = error
+        if retry_at is not None and target == JobStatus.RETRY_WAIT:
+            job.available_at = retry_at
         self._clear_lease(job)
         self.session.flush()
         return job
@@ -285,6 +290,31 @@ class JobRepository:
         )
         jobs = list(self.session.scalars(statement))
         for job in jobs:
+            self._add_queue_event(job)
+        self.session.flush()
+        return jobs
+
+    def release_due_retries(
+        self, *, now: datetime, limit: int = 100
+    ) -> list[Job]:
+        """Move due retry jobs to QUEUED and create durable queue events."""
+
+        if limit < 1:
+            raise ValueError("limit must be at least 1")
+        statement = (
+            select(Job)
+            .where(
+                Job.status == JobStatus.RETRY_WAIT.value,
+                Job.available_at <= now,
+            )
+            .order_by(Job.available_at, Job.created_at)
+            .with_for_update(skip_locked=True)
+            .limit(limit)
+        )
+        jobs = list(self.session.scalars(statement))
+        for job in jobs:
+            transition_job(JobStatus.RETRY_WAIT, JobStatus.QUEUED)
+            job.status = JobStatus.QUEUED.value
             self._add_queue_event(job)
         self.session.flush()
         return jobs

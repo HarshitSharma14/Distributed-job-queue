@@ -19,6 +19,8 @@ def test_load_settings_uses_development_defaults():
     assert settings.max_attempts == 5
     assert settings.outbox_batch_size == 100
     assert settings.outbox_poll_interval_seconds == 1
+    assert settings.scheduler_batch_size == 100
+    assert settings.scheduler_poll_interval_seconds == 1
 
 
 def test_load_settings_parses_environment_values(monkeypatch):
@@ -31,6 +33,8 @@ def test_load_settings_parses_environment_values(monkeypatch):
     monkeypatch.setenv("WORKER_GATEWAY_TOKEN", "test-worker-token")
     monkeypatch.setenv("WORKER_GATEWAY_URL", "https://queue.example.com")
     monkeypatch.setenv("MAX_ATTEMPTS", "3")
+    monkeypatch.setenv("SCHEDULER_BATCH_SIZE", "25")
+    monkeypatch.setenv("SCHEDULER_POLL_INTERVAL_SECONDS", "2")
 
     settings = load_settings()
 
@@ -43,6 +47,8 @@ def test_load_settings_parses_environment_values(monkeypatch):
     assert settings.worker_gateway_token == "test-worker-token"
     assert settings.worker_gateway_url == "https://queue.example.com"
     assert settings.max_attempts == 3
+    assert settings.scheduler_batch_size == 25
+    assert settings.scheduler_poll_interval_seconds == 2
 
 
 def test_load_settings_rejects_invalid_integer(monkeypatch):

@@ -417,7 +417,7 @@ After `max_attempts`, the job becomes `DEAD_LETTERED`; its payload, attempts, an
 
 ### Choose: Separate scheduler process
 
-The scheduler finds `RETRY_WAIT` or delayed `CREATED` jobs where `available_at <= now`, publishes them, and changes them to `QUEUED`. The operation is idempotent so a scheduler restart is safe.
+The scheduler finds `RETRY_WAIT` jobs where `available_at <= now`. In one PostgreSQL transaction, it locks a batch with `SKIP LOCKED`, changes each job to `QUEUED`, and creates an outbox event. The outbox publisher then delivers each job ID to Redis. This allows multiple schedulers to run safely and keeps PostgreSQL authoritative.
 
 ---
 
@@ -613,8 +613,12 @@ RETRY_WAIT
   ▼
 Scheduler finds available_at <= now
   │
-  ├─ Publish job ID to Redis
-  └─ Change RETRY_WAIT → QUEUED
+  ├─ Lock due rows with SKIP LOCKED
+  ├─ Change RETRY_WAIT → QUEUED
+  └─ Create JOB_READY outbox event
+  │
+  ▼
+Outbox publisher puts job ID in Redis
   │
   ▼
 Worker claims the job again
