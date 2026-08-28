@@ -14,6 +14,7 @@ def test_load_settings_uses_development_defaults():
     assert settings.database_url.startswith("postgresql+")
     assert settings.job_lease_seconds == 60
     assert settings.worker_long_poll_seconds == 20
+    assert settings.worker_gateway_token == "dev-worker-token"
     assert settings.max_attempts == 5
     assert settings.outbox_batch_size == 100
     assert settings.outbox_poll_interval_seconds == 1
@@ -26,6 +27,7 @@ def test_load_settings_parses_environment_values(monkeypatch):
     monkeypatch.setenv("API_PORT", "9000")
     monkeypatch.setenv("JOB_LEASE_SECONDS", "90")
     monkeypatch.setenv("WORKER_LONG_POLL_SECONDS", "15")
+    monkeypatch.setenv("WORKER_GATEWAY_TOKEN", "test-worker-token")
     monkeypatch.setenv("MAX_ATTEMPTS", "3")
 
     settings = load_settings()
@@ -36,6 +38,7 @@ def test_load_settings_parses_environment_values(monkeypatch):
     assert settings.api_port == 9000
     assert settings.job_lease_seconds == 90
     assert settings.worker_long_poll_seconds == 15
+    assert settings.worker_gateway_token == "test-worker-token"
     assert settings.max_attempts == 3
 
 
@@ -50,4 +53,12 @@ def test_load_settings_rejects_invalid_boolean(monkeypatch):
     monkeypatch.setenv("APP_DEBUG", "sometimes")
 
     with pytest.raises(ConfigurationError, match="APP_DEBUG"):
+        load_settings()
+
+
+def test_load_settings_requires_worker_token_outside_development(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.delenv("WORKER_GATEWAY_TOKEN", raising=False)
+
+    with pytest.raises(ConfigurationError, match="WORKER_GATEWAY_TOKEN"):
         load_settings()

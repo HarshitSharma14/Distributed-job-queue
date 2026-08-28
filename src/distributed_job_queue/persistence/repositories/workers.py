@@ -43,6 +43,9 @@ class WorkerRepository:
             statement.execution_options(populate_existing=True)
         ).one()
 
+    def get(self, worker_id: str) -> Worker | None:
+        return self.session.get(Worker, worker_id)
+
     def heartbeat(self, worker_id: str, *, now: datetime) -> bool:
         statement = (
             update(Worker)

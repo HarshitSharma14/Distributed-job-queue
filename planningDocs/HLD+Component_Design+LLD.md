@@ -334,12 +334,12 @@ Detailed credential issuance, token rotation, handler approval, and execution sa
 ## Worker endpoints
 
 ```text
-POST /workers/register
-POST /workers/{worker_id}/heartbeat
-POST /worker-jobs/claim
-POST /worker-jobs/{job_id}/lease/renew
-POST /worker-jobs/{job_id}/complete
-POST /worker-jobs/{job_id}/fail
+POST /worker/v1/workers/register
+POST /worker/v1/workers/{worker_id}/heartbeat
+POST /worker/v1/jobs/claim
+POST /worker/v1/jobs/{job_id}/lease/renew
+POST /worker/v1/jobs/{job_id}/complete
+POST /worker/v1/jobs/{job_id}/fail
 GET  /jobs/{job_id}
 ```
 

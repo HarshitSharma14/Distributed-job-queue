@@ -5,8 +5,8 @@ This is the working checklist for implementation. We complete and verify each it
 ## Current focus
 
 - **Current phase:** Phase 5 — API service
-- **Next step:** Refactor worker operations behind the Worker Gateway API, starting with registration and heartbeat
-- **Current milestone:** Worker trust boundary locked: workers receive no PostgreSQL, Redis, or storage credentials
+- **Next step:** Move fenced job completion and failure reporting behind the Worker Gateway
+- **Current milestone:** Worker Gateway owns fenced PostgreSQL and Redis lease renewal; 76 tests pass
 
 ## Phase 1 — Project foundation
 
@@ -64,10 +64,10 @@ This is the working checklist for implementation. We complete and verify each it
 
 - [x] Implement `POST /jobs`
 - [x] Implement `GET /jobs/{job_id}`
-- [ ] Implement worker registration and heartbeat endpoints
-- [ ] Add the Worker Gateway module and limited worker-token dependency
-- [ ] Move job claim and start handoff behind the Worker Gateway
-- [ ] Move lease renewal behind the Worker Gateway
+- [x] Implement worker registration and heartbeat endpoints
+- [x] Add the Worker Gateway module and limited worker-token dependency
+- [x] Move job claim and start handoff behind the Worker Gateway
+- [x] Move lease renewal behind the Worker Gateway
 - [ ] Implement job completion and failure endpoints
 - [ ] Remove direct PostgreSQL and Redis access from the worker runtime
 - [ ] Return temporary signed URLs for required handler artifacts
@@ -148,3 +148,6 @@ This is the working checklist for implementation. We complete and verify each it
 | 2026-08-28 | Job detail API added | Added UUID-validated lookup, authoritative lifecycle fields, ordered attempt history, internal-token filtering, and not-found coverage |
 | 2026-08-28 | Submission idempotency added | Added durable idempotency keys, canonical request fingerprints, conflict detection, replay headers, a unique database constraint, and concurrent-race coverage |
 | 2026-08-28 | Worker trust boundary locked | Workers become execution agents behind a Worker Gateway and receive no PostgreSQL, Redis, or permanent storage credentials; detailed security design is deferred |
+| 2026-08-28 | Worker Gateway presence API added | Added temporary bearer-token protection, worker registration, heartbeat, validation, persistence integration, environment configuration, and API coverage; all 68 tests pass |
+| 2026-08-28 | Worker Gateway claim API added | Moved Redis long polling, atomic claims, capability validation, PostgreSQL `RUNNING` handoff, attempt creation, and stale/incompatible claim cleanup behind the gateway; all 72 tests pass |
+| 2026-08-28 | Worker Gateway lease renewal added | Added token-fenced renewal across authoritative PostgreSQL state and temporary Redis coordination, with stale-token and missing-lease rejection; all 76 tests pass |

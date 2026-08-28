@@ -40,7 +40,7 @@ Main application package. Production code lives here.
 
 ### `api/`
 
-FastAPI application and process runner. `schemas.py` defines public contracts, `dependencies.py` owns request-scoped transactions, `services.py` coordinates application operations, and `routes.py` remains a thin HTTP adapter. Business rules do not belong in route handlers.
+FastAPI application and process runner. `schemas.py` defines public and worker-gateway contracts, while `dependencies.py` owns request-scoped transactions, internal Redis construction, and the temporary worker-token boundary. `services.py` coordinates producer-facing job operations. `worker_gateway_services.py` owns worker presence, the Redis-to-PostgreSQL claim handoff, and fenced lease renewal. `routes.py` exposes producer-facing HTTP operations; `worker_gateway_routes.py` exposes registration, heartbeat, claim, and lease endpoints and will also own completion and failure reporting. Business rules do not belong in route handlers.
 
 ### `domain/`
 
@@ -60,7 +60,7 @@ Transactional outbox publishing. Reads locked PostgreSQL outbox events, idempote
 
 ### `workers/`
 
-Worker process lifecycle. `runtime.py` owns registration and heartbeat operations, `handlers.py` loads explicit handler modules and maps durable job types to functions, `consumer.py` performs the Redis-to-PostgreSQL claim handoff, and `executor.py` runs handlers with lease renewal and fenced finalization. `runner.py` combines these into the deployable process loop with queue subscriptions, independent heartbeats, error isolation, and graceful shutdown.
+Worker execution-agent lifecycle. `handlers.py` loads explicit handler modules and maps durable job types to functions, while `runner.py` owns the process loop, error isolation, and graceful shutdown. The current `runtime.py`, `consumer.py`, and infrastructure-aware portions of `executor.py` are transitional: registration, heartbeat, claim, and renewal now have gateway equivalents; completion and failure finalization still need to move behind the Worker Gateway before the final worker can drop PostgreSQL and Redis access.
 
 ### `scheduler/`
 
@@ -97,8 +97,8 @@ Architecture decisions, research, implementation tracking, and navigation docume
 ## Dependency direction
 
 ```text
-API ───────────────┐
-Workers ───────────┤
+API/Gateway ───────┐
+Workers ──HTTP─────┤
 Scheduler ─────────┼──> Application/domain rules
 Recovery ──────────┘             │
 Publisher ─────────┤             │

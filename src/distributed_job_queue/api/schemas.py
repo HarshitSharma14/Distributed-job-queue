@@ -1,13 +1,18 @@
 """Public API request and response contracts."""
 
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
 from distributed_job_queue.domain.job import JobStatus
+from distributed_job_queue.domain.worker import WorkerStatus
 
 NAME_PATTERN = r"^[A-Za-z0-9_.-]+$"
+WorkerCapability = Annotated[
+    str, Field(min_length=1, max_length=100, pattern=NAME_PATTERN)
+]
 
 
 class JobCreateRequest(BaseModel):
@@ -56,3 +61,50 @@ class JobDetailResponse(BaseModel):
     updated_at: datetime
     completed_at: datetime | None
     attempt_history: list[JobAttemptResponse]
+
+
+class WorkerRegistrationRequest(BaseModel):
+    worker_id: str = Field(min_length=1, max_length=100, pattern=NAME_PATTERN)
+    capabilities: list[WorkerCapability] = Field(min_length=1, max_length=100)
+
+
+class WorkerRegistrationResponse(BaseModel):
+    worker_id: str
+    capabilities: list[str]
+    status: WorkerStatus
+    registered_at: datetime
+    last_heartbeat_at: datetime
+    heartbeat_interval_seconds: int
+
+
+class WorkerHeartbeatResponse(BaseModel):
+    worker_id: str
+    status: WorkerStatus
+    last_heartbeat_at: datetime
+
+
+class WorkerClaimRequest(BaseModel):
+    worker_id: str = Field(min_length=1, max_length=100, pattern=NAME_PATTERN)
+    queue: str = Field(min_length=1, max_length=100, pattern=NAME_PATTERN)
+    wait_seconds: int | None = Field(default=None, ge=0, le=30)
+
+
+class WorkerClaimResponse(BaseModel):
+    job_id: str
+    attempt_number: int
+    type: str
+    queue: str
+    payload: dict[str, Any]
+    lease_token: str
+    lease_expires_at: datetime
+
+
+class WorkerLeaseRenewRequest(BaseModel):
+    worker_id: str = Field(min_length=1, max_length=100, pattern=NAME_PATTERN)
+    lease_token: UUID
+
+
+class WorkerLeaseRenewResponse(BaseModel):
+    job_id: str
+    worker_id: str
+    lease_expires_at: datetime

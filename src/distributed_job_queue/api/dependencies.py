@@ -1,10 +1,19 @@
 """FastAPI dependencies shared by API routes."""
 
 from collections.abc import Iterator
+from secrets import compare_digest
+from typing import Annotated
 
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from redis import Redis
 from sqlalchemy.orm import Session
 
+from distributed_job_queue.common.config import load_settings
 from distributed_job_queue.persistence.database import SessionFactory
+from distributed_job_queue.queueing import RedisQueue
+
+worker_bearer = HTTPBearer(auto_error=False)
 
 
 def get_session() -> Iterator[Session]:
@@ -12,3 +21,39 @@ def get_session() -> Iterator[Session]:
 
     with SessionFactory.begin() as session:
         yield session
+
+
+def get_session_factory():
+    """Provide a factory for operations that must not span a long poll."""
+
+    return SessionFactory
+
+
+def get_redis_queue() -> Iterator[RedisQueue]:
+    """Keep Redis credentials and connections inside the gateway process."""
+
+    client = Redis.from_url(load_settings().redis_url, decode_responses=True)
+    try:
+        yield RedisQueue(client)
+    finally:
+        client.close()
+
+
+def require_worker_token(
+    credentials: Annotated[
+        HTTPAuthorizationCredentials | None, Depends(worker_bearer)
+    ],
+) -> None:
+    """Protect the gateway until the complete credential model is designed."""
+
+    expected_token = load_settings().worker_gateway_token
+    if (
+        credentials is None
+        or credentials.scheme.lower() != "bearer"
+        or not compare_digest(credentials.credentials, expected_token)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid worker token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
