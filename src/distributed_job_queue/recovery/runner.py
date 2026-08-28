@@ -1,22 +1,27 @@
-"""Worker health monitor process entry point."""
+"""Worker-health and expired-job-lease recovery process."""
 
 import signal
 import threading
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from distributed_job_queue.common.config import load_settings
 from distributed_job_queue.persistence.database import SessionFactory
-from distributed_job_queue.persistence.repositories import WorkerRepository
+from distributed_job_queue.recovery.service import RecoveryResult, recover_stale_work
 
 
-def mark_stale_workers_offline() -> list[str]:
-    """Mark workers offline when their heartbeat deadline has passed."""
+def run_once() -> RecoveryResult:
+    """Recover one transactional batch from authoritative PostgreSQL state."""
+
     settings = load_settings()
-    cutoff = datetime.now(timezone.utc) - timedelta(
-        seconds=settings.worker_offline_after_seconds
-    )
     with SessionFactory.begin() as session:
-        return WorkerRepository(session).mark_stale_offline(cutoff=cutoff)
+        return recover_stale_work(
+            session,
+            now=datetime.now(timezone.utc),
+            worker_offline_after_seconds=settings.worker_offline_after_seconds,
+            retry_base_delay_seconds=settings.retry_base_delay_seconds,
+            retry_max_delay_seconds=settings.retry_max_delay_seconds,
+            limit=settings.recovery_batch_size,
+        )
 
 
 def main() -> None:
@@ -30,8 +35,9 @@ def main() -> None:
     signal.signal(signal.SIGTERM, request_stop)
 
     while not stop.is_set():
-        mark_stale_workers_offline()
-        stop.wait(settings.worker_heartbeat_interval_seconds)
+        result = run_once()
+        if not result.offline_worker_ids and not result.recovered_job_ids:
+            stop.wait(settings.recovery_poll_interval_seconds)
 
 
 if __name__ == "__main__":

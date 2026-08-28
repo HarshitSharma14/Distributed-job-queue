@@ -361,7 +361,7 @@ GET  /jobs/{job_id}
 
 ### Choose: Worker heartbeat plus job lease
 
-Workers periodically update `last_heartbeat_at`. Redis holds a short-lived tokenized lease for coordination, while PostgreSQL stores authoritative ownership and expiration. Recovery queries expired `RUNNING` rows, clears ownership with row locking, and writes an outbox event for republication.
+Workers periodically update `last_heartbeat_at`. Redis holds a short-lived tokenized lease for coordination, while PostgreSQL stores authoritative ownership and expiration. Recovery locks expired `RUNNING` rows, fails and fences their active attempts, clears ownership, and moves recoverable jobs to `RETRY_WAIT`. The scheduler publishes them later through the transactional outbox after backoff.
 
 This produces at-least-once delivery. Job handlers must therefore be idempotent.
 
@@ -580,7 +580,7 @@ Recovery monitor locks expired RUNNING row
   ├─ Verify job is still RUNNING
   ├─ Finish the active attempt as FAILED
   ├─ Clear worker ownership
-  ├─ If attempts remain: create JOB_READY outbox event
+  ├─ If attempts remain: calculate backoff and mark RETRY_WAIT
   └─ If exhausted: mark the job FAILED
   │
   ▼

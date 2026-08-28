@@ -68,7 +68,7 @@ Releases durable retries when their PostgreSQL `available_at` time arrives. It l
 
 ### `recovery/`
 
-Health and recovery processes. Its current runner marks workers offline after their heartbeat deadline. Job lease recovery and retry exhaustion handling will also live here.
+PostgreSQL-authoritative health and recovery process. It marks workers offline after their heartbeat deadline, locks expired `RUNNING` jobs, fails and fences their active attempts, clears ownership, and moves recoverable jobs to `RETRY_WAIT`. Retry exhaustion and dead-letter handling also live here.
 
 ### `common/`
 

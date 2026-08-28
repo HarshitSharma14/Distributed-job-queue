@@ -101,10 +101,16 @@ def test_claim_and_recover_expired_job_from_postgres(repository):
         lease_expires_at=expired_at,
     )
 
-    recovered = job_repository.recover_expired(now=expired_at, limit=10)
+    retry_at = expired_at + timedelta(seconds=30)
+    recovered = job_repository.recover_expired(
+        now=expired_at,
+        limit=10,
+        retry_at_for_attempt=lambda _attempt: retry_at,
+    )
 
     assert [item.id for item in recovered] == [job.id]
-    assert job.status == JobStatus.QUEUED.value
+    assert job.status == JobStatus.RETRY_WAIT.value
+    assert job.available_at == retry_at
     assert job.worker_id is None
     assert job.lease_token is None
     assert job.lease_expires_at is None
@@ -118,7 +124,7 @@ def test_claim_and_recover_expired_job_from_postgres(repository):
         "message": "Worker lease expired",
     }
     outbox_count = session.scalar(select(func.count()).select_from(OutboxEvent))
-    assert outbox_count == 2
+    assert outbox_count == 1
 
 
 def test_reconcile_queued_job_creates_missing_outbox_event(repository):
@@ -194,7 +200,10 @@ def test_expired_final_attempt_is_not_requeued(repository):
         lease_expires_at=expired_at,
     )
 
-    recovered = job_repository.recover_expired(now=expired_at)
+    recovered = job_repository.recover_expired(
+        now=expired_at,
+        retry_at_for_attempt=lambda _attempt: expired_at + timedelta(seconds=30),
+    )
 
     assert [item.id for item in recovered] == [job.id]
     assert job.status == JobStatus.FAILED.value

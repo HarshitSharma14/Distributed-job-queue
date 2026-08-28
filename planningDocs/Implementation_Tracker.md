@@ -5,8 +5,8 @@ This is the working checklist for implementation. We complete and verify each it
 ## Current focus
 
 - **Current phase:** Phase 6 — Reliability
-- **Next step:** Implement the recovery monitor for expired `RUNNING` job leases
-- **Current milestone:** Failed jobs use durable exponential backoff with jitter, and the scheduler safely releases due retries through the transactional outbox; 95 tests pass
+- **Next step:** Implement dead-letter handling for jobs that exhaust their attempts
+- **Current milestone:** The recovery monitor fences expired attempts, marks stale workers offline, and sends recoverable jobs through durable backoff; 96 tests pass
 
 ## Phase 1 — Project foundation
 
@@ -86,9 +86,9 @@ This is the working checklist for implementation. We complete and verify each it
 - [x] Implement exponential backoff with jitter
 - [x] Implement the `RETRY_WAIT` state transition
 - [x] Implement the scheduler
-- [ ] Implement the recovery monitor
+- [x] Implement the recovery monitor
 - [ ] Implement dead-letter handling
-- [ ] Test worker crashes and expired leases
+- [x] Test worker crashes and expired leases
 - [ ] Test retry exhaustion
 
 ## Phase 7 — Results and operations
@@ -154,3 +154,4 @@ This is the working checklist for implementation. We complete and verify each it
 | 2026-08-28 | Worker Gateway finalization added | Added migration `0004`, durable attempt fencing tokens, idempotent completion/failure replay, result references, retry/terminal failure selection, and best-effort Redis cleanup; all 81 tests pass |
 | 2026-08-28 | Worker runtime isolated from infrastructure | Added the HTTP Gateway client and refactored registration, heartbeat, claim, renewal, completion, and failure so worker code imports neither Redis nor PostgreSQL; all 85 tests pass |
 | 2026-08-28 | Durable retry scheduling added | Added capped exponential backoff with jitter, persisted retry availability, concurrent-safe scheduler batches, transactional outbox release, process configuration, and retry integration tests; all 95 tests pass |
+| 2026-08-28 | Expired-lease recovery added | Added PostgreSQL-authoritative worker crash recovery, attempt fencing, stale-worker detection, durable retry backoff, batch processing, and process configuration; all 96 tests pass |

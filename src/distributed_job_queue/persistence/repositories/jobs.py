@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from collections.abc import Callable
 from typing import Any
 
 from sqlalchemy import exists, select, update
@@ -239,7 +240,17 @@ class JobRepository:
         self.session.flush()
         return job
 
-    def recover_expired(self, *, now: datetime, limit: int = 100) -> list[Job]:
+    def recover_expired(
+        self,
+        *,
+        now: datetime,
+        retry_at_for_attempt: Callable[[int], datetime],
+        limit: int = 100,
+    ) -> list[Job]:
+        """Fence expired attempts and move recoverable jobs into retry wait."""
+
+        if limit < 1:
+            raise ValueError("limit must be at least 1")
         statement = (
             select(Job)
             .where(
@@ -262,15 +273,13 @@ class JobRepository:
                 finished_at=now,
             )
             exhausted = job.attempts >= job.max_attempts
-            job.status = (
-                JobStatus.FAILED.value if exhausted else JobStatus.QUEUED.value
-            )
+            target = JobStatus.FAILED if exhausted else JobStatus.RETRY_WAIT
+            transition_job(JobStatus.RUNNING, target)
+            job.status = target.value
             job.error = lease_error
-            job.worker_id = None
-            job.lease_token = None
-            job.lease_expires_at = None
             if not exhausted:
-                self._add_queue_event(job)
+                job.available_at = retry_at_for_attempt(job.attempts)
+            self._clear_lease(job)
         self.session.flush()
         return jobs
 

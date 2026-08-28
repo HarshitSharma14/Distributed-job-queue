@@ -28,6 +28,7 @@ job-api = "distributed_job_queue.api.runner:main"
 job-worker = "distributed_job_queue.workers.runner:main"
 job-scheduler = "distributed_job_queue.scheduler.runner:main"
 worker-monitor = "distributed_job_queue.recovery.runner:main"
+recovery-monitor = "distributed_job_queue.recovery.runner:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

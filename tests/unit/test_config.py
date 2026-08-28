@@ -21,6 +21,8 @@ def test_load_settings_uses_development_defaults():
     assert settings.outbox_poll_interval_seconds == 1
     assert settings.scheduler_batch_size == 100
     assert settings.scheduler_poll_interval_seconds == 1
+    assert settings.recovery_batch_size == 100
+    assert settings.recovery_poll_interval_seconds == 1
 
 
 def test_load_settings_parses_environment_values(monkeypatch):
@@ -35,6 +37,8 @@ def test_load_settings_parses_environment_values(monkeypatch):
     monkeypatch.setenv("MAX_ATTEMPTS", "3")
     monkeypatch.setenv("SCHEDULER_BATCH_SIZE", "25")
     monkeypatch.setenv("SCHEDULER_POLL_INTERVAL_SECONDS", "2")
+    monkeypatch.setenv("RECOVERY_BATCH_SIZE", "30")
+    monkeypatch.setenv("RECOVERY_POLL_INTERVAL_SECONDS", "3")
 
     settings = load_settings()
 
@@ -49,6 +53,8 @@ def test_load_settings_parses_environment_values(monkeypatch):
     assert settings.max_attempts == 3
     assert settings.scheduler_batch_size == 25
     assert settings.scheduler_poll_interval_seconds == 2
+    assert settings.recovery_batch_size == 30
+    assert settings.recovery_poll_interval_seconds == 3
 
 
 def test_load_settings_rejects_invalid_integer(monkeypatch):
