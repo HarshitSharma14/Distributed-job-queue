@@ -17,6 +17,8 @@ def test_load_settings_uses_development_defaults():
     assert settings.worker_gateway_url == "http://localhost:8000"
     assert settings.worker_gateway_token == "dev-worker-token"
     assert settings.result_upload_url_seconds == 300
+    assert settings.metrics_token == "dev-metrics-token"
+    assert settings.metrics_port == 0
     assert settings.max_attempts == 5
     assert settings.outbox_batch_size == 100
     assert settings.outbox_poll_interval_seconds == 1
@@ -34,6 +36,8 @@ def test_load_settings_parses_environment_values(monkeypatch):
     monkeypatch.setenv("JOB_LEASE_SECONDS", "90")
     monkeypatch.setenv("WORKER_LONG_POLL_SECONDS", "15")
     monkeypatch.setenv("WORKER_GATEWAY_TOKEN", "test-worker-token")
+    monkeypatch.setenv("METRICS_TOKEN", "test-metrics-token")
+    monkeypatch.setenv("METRICS_PORT", "9100")
     monkeypatch.setenv("WORKER_GATEWAY_URL", "https://queue.example.com")
     monkeypatch.setenv("RESULT_UPLOAD_URL_SECONDS", "120")
     monkeypatch.setenv("MAX_ATTEMPTS", "3")
@@ -51,6 +55,8 @@ def test_load_settings_parses_environment_values(monkeypatch):
     assert settings.job_lease_seconds == 90
     assert settings.worker_long_poll_seconds == 15
     assert settings.worker_gateway_token == "test-worker-token"
+    assert settings.metrics_token == "test-metrics-token"
+    assert settings.metrics_port == 9100
     assert settings.worker_gateway_url == "https://queue.example.com"
     assert settings.result_upload_url_seconds == 120
     assert settings.max_attempts == 3
@@ -79,4 +85,13 @@ def test_load_settings_requires_worker_token_outside_development(monkeypatch):
     monkeypatch.delenv("WORKER_GATEWAY_TOKEN", raising=False)
 
     with pytest.raises(ConfigurationError, match="WORKER_GATEWAY_TOKEN"):
+        load_settings()
+
+
+def test_load_settings_requires_metrics_token_outside_development(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("WORKER_GATEWAY_TOKEN", "worker-token")
+    monkeypatch.delenv("METRICS_TOKEN", raising=False)
+
+    with pytest.raises(ConfigurationError, match="METRICS_TOKEN"):
         load_settings()

@@ -4,6 +4,7 @@ from uuid import uuid4
 
 import httpx
 import pytest
+from prometheus_client import REGISTRY
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -242,6 +243,8 @@ def test_submit_job_replays_same_idempotent_request(api_context):
         "queue": "reports",
         "payload": {"report_id": 42},
     }
+    labels = {"queue": "reports"}
+    before = REGISTRY.get_sample_value("djq_jobs_submitted_total", labels) or 0
 
     first = post_job(request_body, idempotency_key="report-request-42")
     second = post_job(request_body, idempotency_key="report-request-42")
@@ -263,6 +266,7 @@ def test_submit_job_replays_same_idempotent_request(api_context):
         )
     )
     assert len(events) == 1
+    assert REGISTRY.get_sample_value("djq_jobs_submitted_total", labels) == before + 1
 
 
 def test_submit_job_rejects_idempotency_key_reuse_for_different_work(api_context):

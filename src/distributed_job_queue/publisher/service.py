@@ -8,6 +8,7 @@ from distributed_job_queue.domain.job import JobStatus
 from distributed_job_queue.persistence.models import Job, OutboxEvent
 from distributed_job_queue.persistence.repositories import OutboxRepository
 from distributed_job_queue.queueing import RedisQueue
+from distributed_job_queue.common.metrics import OUTBOX_PUBLISHED
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +74,7 @@ class OutboxPublisher:
             job.status = JobStatus.QUEUED.value
         repository.mark_published(event)
         session.flush()
+        OUTBOX_PUBLISHED.labels(queue=queue_name).inc()
         logger.info(
             "Published job to Redis",
             extra={

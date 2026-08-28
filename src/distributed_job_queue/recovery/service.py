@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 
 from distributed_job_queue.domain.retry import retry_available_at
+from distributed_job_queue.common.metrics import RECOVERED_JOBS, WORKERS_MARKED_OFFLINE
 from distributed_job_queue.persistence.repositories import (
     JobRepository,
     WorkerRepository,
@@ -41,6 +42,10 @@ def recover_stale_work(
             max_delay_seconds=retry_max_delay_seconds,
         ),
     )
+    if offline_worker_ids:
+        WORKERS_MARKED_OFFLINE.inc(len(offline_worker_ids))
+    for job in jobs:
+        RECOVERED_JOBS.labels(outcome=job.status.lower()).inc()
     return RecoveryResult(
         offline_worker_ids=offline_worker_ids,
         recovered_job_ids=[job.id for job in jobs],

@@ -5,8 +5,8 @@ This is the working checklist for implementation. We complete and verify each it
 ## Current focus
 
 - **Current phase:** Phase 7 — Results and operations
-- **Next step:** Add queue, worker, retry, failure, and latency metrics
-- **Current milestone:** All processes emit redacted JSON lifecycle logs, and APIs return correlated errors through one stable contract; 106 tests pass
+- **Next step:** Define user ownership and authorization for Admin and Publisher views
+- **Current milestone:** Protected Prometheus metrics cover queue depth, workers, lifecycle outcomes, recovery, and latency without high-cardinality identifiers; 109 tests pass
 
 ## Phase 1 — Project foundation
 
@@ -96,8 +96,17 @@ This is the working checklist for implementation. We complete and verify each it
 - [x] Add MinIO result storage
 - [x] Store result references in PostgreSQL
 - [x] Add structured logs
-- [ ] Add queue, worker, retry, and failure metrics
+- [x] Add queue, worker, retry, and failure metrics
 - [ ] Add job and worker status views
+
+## Phase 7.5 — Admin and Publisher product
+
+- [ ] Define Admin and Publisher identities and ownership
+- [ ] Add authentication and authorization
+- [ ] Add publisher-scoped job and analytics APIs
+- [ ] Add global Admin job, worker, queue, and dead-letter APIs
+- [ ] Combine PostgreSQL analytics with Prometheus trends
+- [ ] Build Admin and Publisher dashboard pages
 
 ## Phase 8 — Running the system
 
@@ -158,3 +167,4 @@ This is the working checklist for implementation. We complete and verify each it
 | 2026-08-28 | Dead-letter handling added | Added terminal `DEAD_LETTERED` state, durable timestamps, migration of exhausted failures, API visibility, idempotent failure replay, and multi-attempt exhaustion coverage; all 97 tests pass |
 | 2026-08-28 | Secure result storage added | Added private MinIO result storage, lease-authorized signed PUT URLs, automatic JSON result uploads, attempt-scoped reference validation, and real MinIO integration coverage; all 104 tests pass |
 | 2026-08-28 | Structured observability foundation added | Added redacted JSON logs, lifecycle events across every process, request correlation IDs, stable API error codes, validation envelopes, and secret-redaction tests; all 106 tests pass |
+| 2026-08-29 | Prometheus metrics added | Added protected API scraping, private process metric servers, low-cardinality lifecycle counters and latency histograms, and authoritative PostgreSQL/Redis state gauges; all 109 tests pass |

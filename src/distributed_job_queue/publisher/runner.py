@@ -7,6 +7,7 @@ from redis import Redis
 
 from distributed_job_queue.common.config import load_settings
 from distributed_job_queue.common.logging import configure_logging
+from distributed_job_queue.common.metrics import start_process_metrics_server
 from distributed_job_queue.persistence.database import SessionFactory
 from distributed_job_queue.publisher.service import OutboxPublisher
 from distributed_job_queue.queueing import RedisQueue
@@ -25,6 +26,7 @@ def run_once() -> int:
 def main() -> None:
     settings = load_settings()
     configure_logging("outbox-publisher", debug=settings.debug)
+    start_process_metrics_server(settings.metrics_port)
     while True:
         published = run_once()
         if published:

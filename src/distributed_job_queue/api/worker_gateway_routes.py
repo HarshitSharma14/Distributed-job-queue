@@ -44,6 +44,7 @@ from distributed_job_queue.api.worker_gateway_services import (
 )
 from distributed_job_queue.queueing import RedisQueue
 from distributed_job_queue.storage import MinioResultStorage
+from distributed_job_queue.common.metrics import LEASE_LOSSES
 
 router = APIRouter(
     prefix="/worker/v1",
@@ -142,6 +143,7 @@ def renew_job_lease(
             session_factory=session_factory,
         )
     except WorkerLeaseLost as exc:
+        LEASE_LOSSES.labels(operation="renew").inc()
         raise APIError(
             status_code=status.HTTP_409_CONFLICT,
             code="WORKER_LEASE_LOST",
@@ -170,6 +172,7 @@ def create_result_upload(
             request,
         )
     except WorkerLeaseLost as exc:
+        LEASE_LOSSES.labels(operation="result_upload").inc()
         raise APIError(
             status_code=status.HTTP_409_CONFLICT,
             code="WORKER_LEASE_LOST",
@@ -198,6 +201,7 @@ def complete_job(
             session_factory=session_factory,
         )
     except WorkerLeaseLost as exc:
+        LEASE_LOSSES.labels(operation="complete").inc()
         raise APIError(
             status_code=status.HTTP_409_CONFLICT,
             code="WORKER_LEASE_LOST",
@@ -232,6 +236,7 @@ def fail_job(
             session_factory=session_factory,
         )
     except WorkerLeaseLost as exc:
+        LEASE_LOSSES.labels(operation="fail").inc()
         raise APIError(
             status_code=status.HTTP_409_CONFLICT,
             code="WORKER_LEASE_LOST",

@@ -522,6 +522,15 @@ Track:
 - active and offline workers
 - expired leases
 
+Prometheus is used for operational trends, not exact publisher accounting. Metric labels remain bounded: queue, route template, status, outcome, and operation. They never contain job IDs, worker IDs, publisher IDs, lease tokens, or signed URLs. PostgreSQL remains the source for permission-scoped Publisher and Admin dashboard totals.
+
+The API owns authoritative current-state gauges for jobs, workers, and Redis queue depth. Scheduler, recovery, and Outbox Publisher processes expose only their own counters on private metrics ports, preventing duplicate gauges when Prometheus scrapes multiple targets. The API `/metrics` endpoint requires a separate metrics token.
+
+Terminology:
+
+- **Publisher user:** authenticated product user who owns or submits jobs.
+- **Outbox Publisher:** internal process that transfers durable PostgreSQL events to Redis.
+
 ---
 
 # Runtime Flows

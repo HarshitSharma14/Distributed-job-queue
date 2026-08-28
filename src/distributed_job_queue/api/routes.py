@@ -19,6 +19,7 @@ from distributed_job_queue.api.services import (
     get_job_detail,
     submit_job,
 )
+from distributed_job_queue.common.metrics import JOBS_SUBMITTED
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 logger = logging.getLogger(__name__)
@@ -51,6 +52,8 @@ def create_job(
         ) from exc
     if submission.replayed:
         response.headers["Idempotency-Replayed"] = "true"
+    else:
+        JOBS_SUBMITTED.labels(queue=submission.response.queue).inc()
     logger.info(
         "Job submission accepted",
         extra={

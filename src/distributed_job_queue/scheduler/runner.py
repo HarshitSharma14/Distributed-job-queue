@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from distributed_job_queue.common.config import load_settings
 from distributed_job_queue.common.logging import configure_logging
+from distributed_job_queue.common.metrics import start_process_metrics_server
 from distributed_job_queue.persistence.database import SessionFactory
 from distributed_job_queue.scheduler.service import release_due_retries
 
@@ -26,6 +27,7 @@ def run_once() -> list[str]:
 def main() -> None:
     settings = load_settings()
     configure_logging("scheduler", debug=settings.debug)
+    start_process_metrics_server(settings.metrics_port)
     stop = threading.Event()
 
     def request_stop(_signum: int, _frame: object) -> None:

@@ -50,6 +50,8 @@ class Settings:
     minio_secret_key: str
     minio_bucket: str
     result_upload_url_seconds: int
+    metrics_token: str
+    metrics_port: int
     worker_gateway_url: str
     worker_gateway_token: str
     worker_heartbeat_interval_seconds: int
@@ -78,6 +80,11 @@ def load_settings() -> Settings:
                 "WORKER_GATEWAY_TOKEN is required outside development"
             )
         worker_gateway_token = "dev-worker-token"
+    metrics_token = os.getenv("METRICS_TOKEN")
+    if not metrics_token:
+        if environment != "development":
+            raise ConfigurationError("METRICS_TOKEN is required outside development")
+        metrics_token = "dev-metrics-token"
 
     return Settings(
         environment=environment,
@@ -95,6 +102,8 @@ def load_settings() -> Settings:
         result_upload_url_seconds=_get_int(
             "RESULT_UPLOAD_URL_SECONDS", 300, minimum=1
         ),
+        metrics_token=metrics_token,
+        metrics_port=_get_int("METRICS_PORT", 0, minimum=0),
         worker_gateway_url=os.getenv(
             "WORKER_GATEWAY_URL", "http://localhost:8000"
         ),

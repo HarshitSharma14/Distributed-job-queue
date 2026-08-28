@@ -300,6 +300,9 @@ Deployment:          Docker Compose
 Testing:             Pytest
 Logging:             Python logging with redacted JSON output
 API Errors:          Stable coded JSON envelope with request IDs
+Metrics Client:      Prometheus Python client
+Metrics Storage:     Grafana Cloud Free or local Prometheus
+Dashboard Analytics: PostgreSQL exact data + Prometheus operational trends
 ```
 
 ## Final architecture with technologies

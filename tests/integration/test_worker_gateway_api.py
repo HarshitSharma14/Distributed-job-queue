@@ -4,6 +4,7 @@ from uuid import uuid4
 
 import httpx
 import pytest
+from prometheus_client import REGISTRY
 from redis import Redis
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
@@ -506,6 +507,8 @@ def test_gateway_completes_job_and_accepts_identical_replay(
         "lease_token": claimed["lease_token"],
         "result_ref": result_ref,
     }
+    labels = {"queue": queue_name, "outcome": "completed"}
+    before = REGISTRY.get_sample_value("djq_job_attempts_finished_total", labels) or 0
 
     first = gateway_request(
         "POST",
@@ -541,6 +544,7 @@ def test_gateway_completes_job_and_accepts_identical_replay(
     assert attempt.status == JobStatus.COMPLETED.value
     assert attempt.lease_token == claimed["lease_token"]
     assert queue.inflight_size(queue_name) == 0
+    assert REGISTRY.get_sample_value("djq_job_attempts_finished_total", labels) == before + 1
 
 
 def test_gateway_rejects_changed_completion_replay(claim_gateway_context):

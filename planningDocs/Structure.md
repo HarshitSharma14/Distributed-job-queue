@@ -77,7 +77,7 @@ PostgreSQL-authoritative health and recovery process. It marks workers offline a
 
 ### `common/`
 
-Shared configuration and structured logging. `logging.py` owns JSON formatting, request context, process configuration, and sensitive-value redaction. API-specific error contracts and HTTP correlation middleware remain under `api/`.
+Shared configuration, structured logging, and operational metrics. `logging.py` owns JSON formatting, request context, process configuration, and sensitive-value redaction. `metrics.py` owns low-cardinality counters, histograms, current-state collectors, and private process metric servers. API-specific errors, HTTP correlation, and protected scraping remain under `api/`.
 
 ## Test structure
 

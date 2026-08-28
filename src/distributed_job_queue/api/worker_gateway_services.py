@@ -3,6 +3,7 @@
 import logging
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from distributed_job_queue.api.schemas import (
@@ -20,6 +21,12 @@ from distributed_job_queue.api.schemas import (
     WorkerResultUploadResponse,
 )
 from distributed_job_queue.common.config import load_settings
+from distributed_job_queue.common.metrics import (
+    JOB_ATTEMPTS_FINISHED,
+    JOB_ATTEMPTS_STARTED,
+    JOB_EXECUTION_DURATION,
+    JOB_QUEUE_WAIT,
+)
 from distributed_job_queue.domain.job import JobStatus
 from distributed_job_queue.domain.retry import retry_available_at
 from distributed_job_queue.domain.worker import WorkerStatus
@@ -28,6 +35,7 @@ from distributed_job_queue.persistence.repositories import (
     JobRepository,
     WorkerRepository,
 )
+from distributed_job_queue.persistence.models import JobAttempt
 from distributed_job_queue.queueing import JobLease, RedisQueue
 from distributed_job_queue.storage import MinioResultStorage
 
@@ -140,7 +148,8 @@ def claim_gateway_job(
                     f"Worker {request.worker_id} does not support {job.type}"
                 )
 
-            lease_expires_at = datetime.now(timezone.utc) + timedelta(
+            claimed_at = datetime.now(timezone.utc)
+            lease_expires_at = claimed_at + timedelta(
                 seconds=settings.job_lease_seconds
             )
             running = repository.mark_running(
@@ -148,6 +157,10 @@ def claim_gateway_job(
                 worker_id=request.worker_id,
                 lease_token=lease.token,
                 lease_expires_at=lease_expires_at,
+            )
+            JOB_ATTEMPTS_STARTED.labels(queue=running.queue).inc()
+            JOB_QUEUE_WAIT.labels(queue=running.queue).observe(
+                max(0.0, (claimed_at - running.available_at).total_seconds())
             )
             logger.info(
                 "Job claimed",
@@ -255,6 +268,13 @@ def complete_gateway_job(
                 raise ConcurrentJobUpdate(f"Worker no longer owns job {job_id}")
             queue_name = existing.queue
             replayed = existing.status == JobStatus.COMPLETED.value
+            attempt_started_at = session.scalar(
+                select(JobAttempt.started_at).where(
+                    JobAttempt.job_id == job_id,
+                    JobAttempt.attempt_number == existing.attempts,
+                )
+            )
+            finished_at = datetime.now(timezone.utc)
             expected_result_ref = (
                 f"jobs/{job_id}/attempts/{existing.attempts}/result.json"
             )
@@ -269,7 +289,7 @@ def complete_gateway_job(
                 job_id,
                 worker_id=request.worker_id,
                 lease_token=lease_token,
-                now=datetime.now(timezone.utc),
+                now=finished_at,
                 result_ref=request.result_ref,
             )
             response = WorkerFinalizationResponse(
@@ -290,6 +310,16 @@ def complete_gateway_job(
         worker_id=request.worker_id,
         lease_token=lease_token,
     )
+    if not response.replayed:
+        JOB_ATTEMPTS_FINISHED.labels(
+            queue=queue_name,
+            outcome=response.status.value.lower(),
+        ).inc()
+        if attempt_started_at is not None:
+            JOB_EXECUTION_DURATION.labels(
+                queue=queue_name,
+                outcome=response.status.value.lower(),
+            ).observe(max(0.0, (finished_at - attempt_started_at).total_seconds()))
     logger.info(
         "Job completed",
         extra={
@@ -369,6 +399,12 @@ def fail_gateway_job(
                 JobStatus.DEAD_LETTERED.value,
             }
             now = datetime.now(timezone.utc)
+            attempt_started_at = session.scalar(
+                select(JobAttempt.started_at).where(
+                    JobAttempt.job_id == job_id,
+                    JobAttempt.attempt_number == existing.attempts,
+                )
+            )
             retry_at = retry_available_at(
                 now,
                 existing.attempts,
@@ -401,6 +437,16 @@ def fail_gateway_job(
         worker_id=request.worker_id,
         lease_token=lease_token,
     )
+    if not response.replayed:
+        JOB_ATTEMPTS_FINISHED.labels(
+            queue=queue_name,
+            outcome=response.status.value.lower(),
+        ).inc()
+        if attempt_started_at is not None:
+            JOB_EXECUTION_DURATION.labels(
+                queue=queue_name,
+                outcome=response.status.value.lower(),
+            ).observe(max(0.0, (now - attempt_started_at).total_seconds()))
     logger.warning(
         "Job attempt failed",
         extra={

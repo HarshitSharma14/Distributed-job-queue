@@ -16,6 +16,7 @@ from distributed_job_queue.queueing import RedisQueue
 from distributed_job_queue.storage import MinioResultStorage
 
 worker_bearer = HTTPBearer(auto_error=False)
+metrics_bearer = HTTPBearer(auto_error=False)
 
 
 def get_session() -> Iterator[Session]:
@@ -70,5 +71,26 @@ def require_worker_token(
             status_code=status.HTTP_401_UNAUTHORIZED,
             code="WORKER_UNAUTHORIZED",
             message="Invalid worker token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
+def require_metrics_token(
+    credentials: Annotated[
+        HTTPAuthorizationCredentials | None, Depends(metrics_bearer)
+    ],
+) -> None:
+    """Protect operational metrics from public dashboard users."""
+
+    expected_token = load_settings().metrics_token
+    if (
+        credentials is None
+        or credentials.scheme.lower() != "bearer"
+        or not compare_digest(credentials.credentials, expected_token)
+    ):
+        raise APIError(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            code="METRICS_UNAUTHORIZED",
+            message="Invalid metrics token",
             headers={"WWW-Authenticate": "Bearer"},
         )

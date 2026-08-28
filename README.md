@@ -131,4 +131,15 @@ Read the authoritative job state and execution history:
 curl http://localhost:8000/jobs/<job_id>
 ```
 
+## Operational metrics
+
+The API exposes a private Prometheus endpoint using a separate token:
+
+```bash
+curl http://localhost:8000/metrics \
+  -H 'Authorization: Bearer replace-with-a-long-random-token'
+```
+
+Set `METRICS_PORT` to a non-zero internal port when running the scheduler, recovery monitor, or Outbox Publisher as independently scraped processes. Keep these ports private. Publisher-specific dashboard totals come from PostgreSQL; Prometheus is used for operational rates, latency, queue depth, and health trends.
+
 The response includes the current status, active worker and lease expiry when applicable, result reference, error, and ordered attempt history. Internal fencing tokens are never exposed.
