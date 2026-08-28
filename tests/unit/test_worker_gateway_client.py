@@ -112,6 +112,40 @@ def test_client_reports_completion_and_failure():
         client.close()
 
 
+def test_client_uploads_json_result_without_worker_storage_credentials():
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        if request.url.path.endswith("/result-upload"):
+            return httpx.Response(
+                200,
+                json={
+                    "job_id": "job-1",
+                    "result_ref": "jobs/job-1/attempts/1/result.json",
+                    "upload_url": "https://storage.example.com/signed-result",
+                    "expires_at": "2026-08-28T10:05:00+00:00",
+                },
+            )
+        if request.url.host == "storage.example.com":
+            return httpx.Response(200)
+        raise AssertionError(f"Unexpected request: {request.url}")
+
+    client = make_client(handler)
+    lease = WorkerLease("job-1", "worker-1", "reports", "lease-token")
+    try:
+        result_ref = client.store_result(lease, {"report_id": 42})
+    finally:
+        client.close()
+
+    assert result_ref == "jobs/job-1/attempts/1/result.json"
+    assert len(requests) == 2
+    assert requests[0].headers["authorization"] == "Bearer worker-secret"
+    assert "authorization" not in requests[1].headers
+    assert requests[1].headers["content-type"] == "application/json"
+    assert requests[1].content == b'{"report_id":42}'
+
+
 def test_client_distinguishes_terminal_conflict_from_gateway_error():
     responses = iter(
         [

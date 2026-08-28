@@ -215,7 +215,7 @@ Examples include S3 and MinIO.
 
 ### Choose: MinIO with an S3-compatible interface
 
-PostgreSQL stores result metadata and a `result_reference`; MinIO stores large outputs. This keeps the design production-like while remaining easy to run locally.
+PostgreSQL stores an opaque `result_reference`; MinIO stores the output in a private bucket. The Worker Gateway validates the active lease and issues a short-lived, attempt-scoped signed PUT URL. Workers upload through that URL and never receive permanent MinIO credentials.
 
 ---
 

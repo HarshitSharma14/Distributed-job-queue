@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from distributed_job_queue.api.app import app
 from distributed_job_queue.api.dependencies import (
     get_redis_queue,
+    get_result_storage,
     get_session,
     get_session_factory,
 )
@@ -21,8 +22,22 @@ from distributed_job_queue.persistence.database import engine
 from distributed_job_queue.persistence.models import Job, JobAttempt, Worker
 from distributed_job_queue.persistence.repositories import JobRepository
 from distributed_job_queue.queueing import RedisQueue
+from distributed_job_queue.storage import ResultUpload
 
 WORKER_TOKEN = "integration-worker-token"
+
+
+class RecordingResultStorage:
+    def __init__(self) -> None:
+        self.calls = []
+
+    def create_result_upload(self, *, job_id, attempt_number, expires_in_seconds):
+        self.calls.append((job_id, attempt_number, expires_in_seconds))
+        return ResultUpload(
+            result_ref=f"jobs/{job_id}/attempts/{attempt_number}/result.json",
+            upload_url="https://storage.example.com/signed-result",
+            expires_at=datetime.fromisoformat("2026-08-28T10:05:00+00:00"),
+        )
 
 
 @pytest.fixture
@@ -462,10 +477,11 @@ def test_gateway_completes_job_and_accepts_identical_replay(
 ):
     session, queue, _, queue_name = claim_gateway_context
     job, claimed = claim_ready_job(session, queue, queue_name)
+    result_ref = f"jobs/{job.id}/attempts/1/result.json"
     request_body = {
         "worker_id": "worker-1",
         "lease_token": claimed["lease_token"],
-        "result_ref": "results/job-output.json",
+        "result_ref": result_ref,
     }
 
     first = gateway_request(
@@ -484,7 +500,7 @@ def test_gateway_completes_job_and_accepts_identical_replay(
         "job_id": job.id,
         "status": JobStatus.COMPLETED.value,
         "attempt_number": 1,
-        "result_ref": "results/job-output.json",
+        "result_ref": result_ref,
         "error": None,
         "replayed": False,
     }
@@ -494,7 +510,7 @@ def test_gateway_completes_job_and_accepts_identical_replay(
     completed = session.get(Job, job.id)
     assert completed is not None
     assert completed.status == JobStatus.COMPLETED.value
-    assert completed.result_ref == "results/job-output.json"
+    assert completed.result_ref == result_ref
     attempt = session.scalar(
         select(JobAttempt).where(JobAttempt.job_id == job.id)
     )
@@ -507,10 +523,11 @@ def test_gateway_completes_job_and_accepts_identical_replay(
 def test_gateway_rejects_changed_completion_replay(claim_gateway_context):
     session, queue, _, queue_name = claim_gateway_context
     job, claimed = claim_ready_job(session, queue, queue_name)
+    result_ref = f"jobs/{job.id}/attempts/1/result.json"
     original = {
         "worker_id": "worker-1",
         "lease_token": claimed["lease_token"],
-        "result_ref": "results/original.json",
+        "result_ref": result_ref,
     }
     assert gateway_request(
         "POST",
@@ -526,7 +543,7 @@ def test_gateway_rejects_changed_completion_replay(claim_gateway_context):
 
     assert changed.status_code == 409
     assert changed.json() == {
-        "detail": f"Worker no longer owns job {job.id}"
+        "detail": "Result reference does not belong to this job attempt"
     }
 
 
@@ -596,6 +613,41 @@ def test_gateway_marks_exhausted_failure_terminal(claim_gateway_context):
     assert failed is not None
     assert failed.status == JobStatus.DEAD_LETTERED.value
     assert failed.dead_lettered_at is not None
+
+
+def test_gateway_issues_result_upload_only_to_current_lease(claim_gateway_context):
+    session, queue, _, queue_name = claim_gateway_context
+    job, claimed = claim_ready_job(session, queue, queue_name)
+    storage = RecordingResultStorage()
+    app.dependency_overrides[get_result_storage] = lambda: storage
+
+    response = gateway_request(
+        "POST",
+        f"/worker/v1/jobs/{job.id}/result-upload",
+        request_body={
+            "worker_id": "worker-1",
+            "lease_token": claimed["lease_token"],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["result_ref"] == (
+        f"jobs/{job.id}/attempts/1/result.json"
+    )
+    assert response.json()["upload_url"] == (
+        "https://storage.example.com/signed-result"
+    )
+    assert storage.calls == [(job.id, 1, 300)]
+
+    stale = gateway_request(
+        "POST",
+        f"/worker/v1/jobs/{job.id}/result-upload",
+        request_body={
+            "worker_id": "worker-1",
+            "lease_token": str(uuid4()),
+        },
+    )
+    assert stale.status_code == 409
 
 
 def test_gateway_completion_remains_durable_when_redis_lease_is_missing(

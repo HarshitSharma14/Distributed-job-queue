@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from distributed_job_queue.api.dependencies import (
     get_session,
     get_redis_queue,
+    get_result_storage,
     get_session_factory,
     require_worker_token,
 )
@@ -24,19 +25,24 @@ from distributed_job_queue.api.schemas import (
     WorkerLeaseRenewResponse,
     WorkerRegistrationRequest,
     WorkerRegistrationResponse,
+    WorkerResultUploadRequest,
+    WorkerResultUploadResponse,
 )
 from distributed_job_queue.api.worker_gateway_services import (
     WorkerCapabilityMismatch,
     WorkerLeaseLost,
+    WorkerResultRejected,
     WorkerUnavailable,
     claim_gateway_job,
     complete_gateway_job,
+    create_gateway_result_upload,
     fail_gateway_job,
     heartbeat_gateway_worker,
     register_gateway_worker,
     renew_gateway_lease,
 )
 from distributed_job_queue.queueing import RedisQueue
+from distributed_job_queue.storage import MinioResultStorage
 
 router = APIRouter(
     prefix="/worker/v1",
@@ -139,6 +145,33 @@ def renew_job_lease(
 
 
 @router.post(
+    "/jobs/{job_id}/result-upload",
+    response_model=WorkerResultUploadResponse,
+    responses={
+        status.HTTP_409_CONFLICT: {"description": "Worker no longer owns the job"}
+    },
+)
+def create_result_upload(
+    job_id: UUID,
+    request: WorkerResultUploadRequest,
+    storage: Annotated[MinioResultStorage, Depends(get_result_storage)],
+    session: Annotated[Session, Depends(get_session)],
+) -> WorkerResultUploadResponse:
+    try:
+        return create_gateway_result_upload(
+            session,
+            storage,
+            str(job_id),
+            request,
+        )
+    except WorkerLeaseLost as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
     "/jobs/{job_id}/complete",
     response_model=WorkerFinalizationResponse,
     responses={
@@ -159,6 +192,11 @@ def complete_job(
             session_factory=session_factory,
         )
     except WorkerLeaseLost as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except WorkerResultRejected as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),

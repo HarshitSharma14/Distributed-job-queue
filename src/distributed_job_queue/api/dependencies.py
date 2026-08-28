@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from distributed_job_queue.common.config import load_settings
 from distributed_job_queue.persistence.database import SessionFactory
 from distributed_job_queue.queueing import RedisQueue
+from distributed_job_queue.storage import MinioResultStorage
 
 worker_bearer = HTTPBearer(auto_error=False)
 
@@ -37,6 +38,18 @@ def get_redis_queue() -> Iterator[RedisQueue]:
         yield RedisQueue(client)
     finally:
         client.close()
+
+
+def get_result_storage() -> MinioResultStorage:
+    """Keep permanent object-storage credentials inside the platform."""
+
+    settings = load_settings()
+    return MinioResultStorage(
+        settings.minio_endpoint,
+        settings.minio_access_key,
+        settings.minio_secret_key,
+        settings.minio_bucket,
+    )
 
 
 def require_worker_token(

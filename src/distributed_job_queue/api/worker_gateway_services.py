@@ -15,6 +15,8 @@ from distributed_job_queue.api.schemas import (
     WorkerLeaseRenewResponse,
     WorkerRegistrationRequest,
     WorkerRegistrationResponse,
+    WorkerResultUploadRequest,
+    WorkerResultUploadResponse,
 )
 from distributed_job_queue.common.config import load_settings
 from distributed_job_queue.domain.job import JobStatus
@@ -26,6 +28,7 @@ from distributed_job_queue.persistence.repositories import (
     WorkerRepository,
 )
 from distributed_job_queue.queueing import JobLease, RedisQueue
+from distributed_job_queue.storage import MinioResultStorage
 
 
 class WorkerUnavailable(LookupError):
@@ -38,6 +41,10 @@ class WorkerCapabilityMismatch(ValueError):
 
 class WorkerLeaseLost(RuntimeError):
     """Raised when a worker cannot prove current ownership of a job."""
+
+
+class WorkerResultRejected(ValueError):
+    """Raised when a worker reports a result outside its assigned object key."""
 
 
 def register_gateway_worker(
@@ -218,6 +225,16 @@ def complete_gateway_job(
                 raise ConcurrentJobUpdate(f"Worker no longer owns job {job_id}")
             queue_name = existing.queue
             replayed = existing.status == JobStatus.COMPLETED.value
+            expected_result_ref = (
+                f"jobs/{job_id}/attempts/{existing.attempts}/result.json"
+            )
+            if (
+                request.result_ref is not None
+                and request.result_ref != expected_result_ref
+            ):
+                raise WorkerResultRejected(
+                    "Result reference does not belong to this job attempt"
+                )
             job = repository.complete_execution(
                 job_id,
                 worker_id=request.worker_id,
@@ -244,6 +261,37 @@ def complete_gateway_job(
         lease_token=lease_token,
     )
     return response
+
+
+def create_gateway_result_upload(
+    session: Session,
+    storage: MinioResultStorage,
+    job_id: str,
+    request: WorkerResultUploadRequest,
+) -> WorkerResultUploadResponse:
+    """Authorize one live attempt and issue a temporary result upload URL."""
+
+    settings = load_settings()
+    try:
+        job = JobRepository(session).verify_active_lease(
+            job_id,
+            worker_id=request.worker_id,
+            lease_token=str(request.lease_token),
+            now=datetime.now(timezone.utc),
+        )
+    except ConcurrentJobUpdate as exc:
+        raise WorkerLeaseLost(f"Worker no longer owns job {job_id}") from exc
+    upload = storage.create_result_upload(
+        job_id=job.id,
+        attempt_number=job.attempts,
+        expires_in_seconds=settings.result_upload_url_seconds,
+    )
+    return WorkerResultUploadResponse(
+        job_id=job.id,
+        result_ref=upload.result_ref,
+        upload_url=upload.upload_url,
+        expires_at=upload.expires_at,
+    )
 
 
 def fail_gateway_job(

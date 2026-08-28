@@ -21,6 +21,7 @@ class FakeGateway:
         self.claim_calls = []
         self.renew_calls = []
         self.complete_calls = []
+        self.store_result_calls = []
         self.fail_calls = []
         self.renew_result = True
         self.complete_status = JobStatus.COMPLETED
@@ -40,6 +41,10 @@ class FakeGateway:
         if self.reject_completion:
             raise GatewayLeaseRejected("stale lease")
         return self.complete_status
+
+    def store_result(self, lease, result):
+        self.store_result_calls.append((lease, result))
+        return f"jobs/{lease.job_id}/attempts/1/result.json"
 
     def fail(self, lease, *, error):
         self.fail_calls.append((lease, error))
@@ -92,7 +97,10 @@ def test_executor_reports_success_through_gateway():
 
     assert outcome.status == JobStatus.COMPLETED
     assert outcome.result == 42
-    assert gateway.complete_calls == [(claimed.lease, None)]
+    assert gateway.store_result_calls == [(claimed.lease, 42)]
+    assert gateway.complete_calls == [
+        (claimed.lease, "jobs/job-1/attempts/1/result.json")
+    ]
     assert gateway.fail_calls == []
 
 

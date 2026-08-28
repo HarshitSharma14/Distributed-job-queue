@@ -96,6 +96,8 @@ job-worker \
 
 `--queue` and `--handler-module` may be repeated. If capabilities are not supplied explicitly, the worker advertises its registered job types.
 
+When a handler returns a non-`None` JSON-serializable value, the worker requests a short-lived upload URL from the Worker Gateway, uploads the result to private MinIO storage, and completes the job with the issued object reference. The worker never receives MinIO access credentials.
+
 ## Submit a job
 
 Start the API:

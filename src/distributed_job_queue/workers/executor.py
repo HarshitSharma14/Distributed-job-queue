@@ -117,10 +117,32 @@ class WorkerExecutor:
                     error=error,
                 )
 
+            renewer.ensure_owned()
+            try:
+                result_ref = (
+                    self.gateway.store_result(claimed.lease, result)
+                    if result is not None
+                    else None
+                )
+            except GatewayLeaseRejected as gateway_error:
+                raise LeaseLost(f"Lease lost for job {claimed.id}") from gateway_error
+            except Exception as exc:
+                renewer.stop()
+                renewer.ensure_owned()
+                error = {"type": type(exc).__name__, "message": str(exc)}
+                try:
+                    status = self.gateway.fail(claimed.lease, error=error)
+                except GatewayLeaseRejected as gateway_error:
+                    raise LeaseLost(f"Lease lost for job {claimed.id}") from gateway_error
+                return ExecutionOutcome(status=status, error=error)
+
             renewer.stop()
             renewer.ensure_owned()
             try:
-                status = self.gateway.complete(claimed.lease)
+                status = self.gateway.complete(
+                    claimed.lease,
+                    result_ref=result_ref,
+                )
             except GatewayLeaseRejected as gateway_error:
                 raise LeaseLost(f"Lease lost for job {claimed.id}") from gateway_error
             return ExecutionOutcome(

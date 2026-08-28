@@ -117,6 +117,18 @@ class WorkerCompletionRequest(BaseModel):
     result_ref: str | None = Field(default=None, min_length=1, max_length=2_048)
 
 
+class WorkerResultUploadRequest(BaseModel):
+    worker_id: str = Field(min_length=1, max_length=100, pattern=NAME_PATTERN)
+    lease_token: UUID
+
+
+class WorkerResultUploadResponse(BaseModel):
+    job_id: str
+    result_ref: str
+    upload_url: str
+    expires_at: datetime
+
+
 class WorkerFailureDetail(BaseModel):
     type: str = Field(min_length=1, max_length=200)
     message: str = Field(min_length=1, max_length=4_000)

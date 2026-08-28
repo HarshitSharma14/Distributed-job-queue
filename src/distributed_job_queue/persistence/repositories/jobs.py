@@ -153,6 +153,23 @@ class JobRepository:
         )
         return self.session.execute(statement).rowcount == 1
 
+    def verify_active_lease(
+        self,
+        job_id: str,
+        *,
+        worker_id: str,
+        lease_token: str,
+        now: datetime,
+    ) -> Job:
+        """Return a running job only while the caller owns its live lease."""
+
+        return self._owned_running_job(
+            job_id,
+            worker_id=worker_id,
+            lease_token=lease_token,
+            now=now,
+        )
+
     def complete_execution(
         self,
         job_id: str,
@@ -383,6 +400,7 @@ class JobRepository:
                 Job.lease_expires_at > now,
             )
             .with_for_update()
+            .execution_options(populate_existing=True)
         )
         job = self.session.scalars(statement).one_or_none()
         if job is None:

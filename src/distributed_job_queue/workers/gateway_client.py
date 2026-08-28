@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -59,9 +60,14 @@ class WorkerGatewayClient:
             timeout=request_timeout_seconds,
             transport=transport,
         )
+        self._upload_client = httpx.Client(
+            timeout=request_timeout_seconds,
+            transport=transport,
+        )
 
     def close(self) -> None:
         self._client.close()
+        self._upload_client.close()
 
     def register(self, worker_id: str, capabilities: list[str]) -> None:
         response = self._client.post(
@@ -135,6 +141,34 @@ class WorkerGatewayClient:
         )
         self._raise_for_terminal_error(response)
         return JobStatus(response.json()["status"])
+
+    def store_result(self, lease: WorkerLease, result: Any) -> str:
+        """Serialize a result and upload it through a temporary signed URL."""
+
+        encoded = json.dumps(
+            result,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        reservation = self._client.post(
+            f"/worker/v1/jobs/{lease.job_id}/result-upload",
+            json={"worker_id": lease.worker_id, "lease_token": lease.token},
+        )
+        self._raise_for_terminal_error(reservation)
+        body = reservation.json()
+        if body.get("job_id") != lease.job_id:
+            raise GatewayRequestError("Gateway returned a result URL for another job")
+        upload = self._upload_client.put(
+            body["upload_url"],
+            content=encoded,
+            headers={"Content-Type": "application/json"},
+        )
+        if not upload.is_success:
+            raise GatewayRequestError(
+                f"Result upload returned {upload.status_code}: "
+                f"{upload.text or 'Unknown storage error'}"
+            )
+        return str(body["result_ref"])
 
     def fail(self, lease: WorkerLease, *, error: dict[str, Any]) -> JobStatus:
         response = self._client.post(

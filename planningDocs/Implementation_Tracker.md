@@ -5,8 +5,8 @@ This is the working checklist for implementation. We complete and verify each it
 ## Current focus
 
 - **Current phase:** Phase 7 — Results and operations
-- **Next step:** Add MinIO-backed result storage and temporary result references
-- **Current milestone:** Exhausted jobs are durably dead-lettered with timestamps and complete attempt history; 97 tests pass
+- **Next step:** Add structured application logging and shared error handling
+- **Current milestone:** Workers upload handler results to private MinIO through lease-authorized signed URLs without receiving storage credentials; 104 tests pass
 
 ## Phase 1 — Project foundation
 
@@ -93,7 +93,7 @@ This is the working checklist for implementation. We complete and verify each it
 
 ## Phase 7 — Results and operations
 
-- [ ] Add MinIO result storage
+- [x] Add MinIO result storage
 - [x] Store result references in PostgreSQL
 - [ ] Add structured logs
 - [ ] Add queue, worker, retry, and failure metrics
@@ -156,3 +156,4 @@ This is the working checklist for implementation. We complete and verify each it
 | 2026-08-28 | Durable retry scheduling added | Added capped exponential backoff with jitter, persisted retry availability, concurrent-safe scheduler batches, transactional outbox release, process configuration, and retry integration tests; all 95 tests pass |
 | 2026-08-28 | Expired-lease recovery added | Added PostgreSQL-authoritative worker crash recovery, attempt fencing, stale-worker detection, durable retry backoff, batch processing, and process configuration; all 96 tests pass |
 | 2026-08-28 | Dead-letter handling added | Added terminal `DEAD_LETTERED` state, durable timestamps, migration of exhausted failures, API visibility, idempotent failure replay, and multi-attempt exhaustion coverage; all 97 tests pass |
+| 2026-08-28 | Secure result storage added | Added private MinIO result storage, lease-authorized signed PUT URLs, automatic JSON result uploads, attempt-scoped reference validation, and real MinIO integration coverage; all 104 tests pass |

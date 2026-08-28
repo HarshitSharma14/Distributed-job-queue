@@ -16,6 +16,7 @@ def test_load_settings_uses_development_defaults():
     assert settings.worker_long_poll_seconds == 20
     assert settings.worker_gateway_url == "http://localhost:8000"
     assert settings.worker_gateway_token == "dev-worker-token"
+    assert settings.result_upload_url_seconds == 300
     assert settings.max_attempts == 5
     assert settings.outbox_batch_size == 100
     assert settings.outbox_poll_interval_seconds == 1
@@ -34,6 +35,7 @@ def test_load_settings_parses_environment_values(monkeypatch):
     monkeypatch.setenv("WORKER_LONG_POLL_SECONDS", "15")
     monkeypatch.setenv("WORKER_GATEWAY_TOKEN", "test-worker-token")
     monkeypatch.setenv("WORKER_GATEWAY_URL", "https://queue.example.com")
+    monkeypatch.setenv("RESULT_UPLOAD_URL_SECONDS", "120")
     monkeypatch.setenv("MAX_ATTEMPTS", "3")
     monkeypatch.setenv("SCHEDULER_BATCH_SIZE", "25")
     monkeypatch.setenv("SCHEDULER_POLL_INTERVAL_SECONDS", "2")
@@ -50,6 +52,7 @@ def test_load_settings_parses_environment_values(monkeypatch):
     assert settings.worker_long_poll_seconds == 15
     assert settings.worker_gateway_token == "test-worker-token"
     assert settings.worker_gateway_url == "https://queue.example.com"
+    assert settings.result_upload_url_seconds == 120
     assert settings.max_attempts == 3
     assert settings.scheduler_batch_size == 25
     assert settings.scheduler_poll_interval_seconds == 2

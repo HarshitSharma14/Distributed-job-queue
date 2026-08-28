@@ -128,6 +128,7 @@ error              JSON nullable
 created_at         timestamp
 updated_at         timestamp
 completed_at       timestamp nullable
+dead_lettered_at   timestamp nullable
 
 workers
 -------
@@ -163,7 +164,7 @@ published_at       timestamp nullable
 
 Job creation and recovery write outbox events in the same PostgreSQL transaction. A publisher delivers pending events to Redis and marks them published.
 
-Large results are stored outside the job row; `result_ref` points to the result location. Small results may be stored inline when appropriate.
+Results are stored outside the job row; `result_ref` is an opaque, attempt-scoped object key. A worker with a live lease asks the Worker Gateway for a short-lived signed PUT URL, uploads without storage credentials, and then completes the job with that exact reference. The gateway rejects references belonging to another job or attempt.
 
 ---
 
@@ -555,7 +556,10 @@ Gateway atomically claims job and creates tokenized Redis lease
   ├─ Store worker_id, lease_token, and lease_expires_at
   ├─ Create job-attempt record
   ├─ Worker renews lease through the gateway while processing
-  └─ Execute handler
+  ├─ Execute handler
+  ├─ Request attempt-scoped signed result upload URL
+  ├─ Upload result directly to MinIO without permanent credentials
+  └─ Report the issued result_ref
        │
        ├─ Success: gateway saves result, marks COMPLETED, and removes lease
        └─ Failure: gateway records error and calculates retry or dead-letter

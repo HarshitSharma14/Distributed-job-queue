@@ -23,6 +23,7 @@ distributed_job_queue/
 │       ├── queueing/
 │       ├── recovery/
 │       ├── scheduler/
+│       ├── storage/
 │       └── workers/
 ├── tests/
 │   ├── unit/
@@ -65,6 +66,10 @@ Worker execution-agent lifecycle with no infrastructure access. `gateway_client.
 ### `scheduler/`
 
 Releases durable retries when their PostgreSQL `available_at` time arrives. It locks due `RETRY_WAIT` rows with `SKIP LOCKED`, changes them to `QUEUED`, and creates transactional outbox events. The separate publisher performs Redis delivery.
+
+### `storage/`
+
+Private object-storage adapters. The MinIO adapter creates short-lived, attempt-scoped signed uploads while permanent access credentials remain inside the API process. PostgreSQL stores only the resulting opaque object key.
 
 ### `recovery/`
 
