@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from distributed_job_queue.api.app import app
 from distributed_job_queue.api.dependencies import get_session
 from distributed_job_queue.domain.job import JobStatus
+from distributed_job_queue.domain.identity import BOOTSTRAP_JOB_TYPE_ID, BOOTSTRAP_USER_ID
 from distributed_job_queue.persistence.database import engine
 from distributed_job_queue.persistence.models import Job, OutboxEvent, Worker
 from distributed_job_queue.persistence.repositories import JobRepository
@@ -99,6 +100,9 @@ def test_submit_job_creates_job_and_outbox_event_atomically(api_context):
     assert job is not None
     assert job.payload == {"report_id": 42}
     assert job.max_attempts == 3
+    assert job.job_type_id == BOOTSTRAP_JOB_TYPE_ID
+    assert job.publisher_id == BOOTSTRAP_USER_ID
+    assert job.producer_id == BOOTSTRAP_USER_ID
     event = session.scalar(
         select(OutboxEvent).where(OutboxEvent.job_id == job.id)
     )

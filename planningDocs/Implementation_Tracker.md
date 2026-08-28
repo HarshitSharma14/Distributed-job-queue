@@ -4,9 +4,9 @@ This is the working checklist for implementation. We complete and verify each it
 
 ## Current focus
 
-- **Current phase:** Phase 7 — Results and operations
-- **Next step:** Define user ownership and authorization for Admin and Publisher views
-- **Current milestone:** Protected Prometheus metrics cover queue depth, workers, lifecycle outcomes, recovery, and latency without high-cardinality identifiers; 109 tests pass
+- **Current phase:** Phase 7.5 — Role-scoped dashboard product
+- **Next step:** Add Producer API keys and apply ownership authorization to job routes
+- **Current milestone:** Human users authenticate with Argon2id passwords and revocable PostgreSQL sessions protected by secure cookies and CSRF tokens; 119 tests pass
 
 ## Phase 1 — Project foundation
 
@@ -99,14 +99,20 @@ This is the working checklist for implementation. We complete and verify each it
 - [x] Add queue, worker, retry, and failure metrics
 - [ ] Add job and worker status views
 
-## Phase 7.5 — Admin and Publisher product
+## Phase 7.5 — Role-scoped dashboard product
 
-- [ ] Define Admin and Publisher identities and ownership
-- [ ] Add authentication and authorization
+- [x] Define Admin, Publisher, Producer, and Worker visibility and ownership
+- [x] Add identity and job-type persistence models
+- [x] Add human authentication and authenticated request identity
+- [ ] Add Producer API keys
+- [ ] Apply role and ownership authorization to product APIs
+- [ ] Replace the shared Worker Gateway token with per-agent credentials
 - [ ] Add publisher-scoped job and analytics APIs
+- [ ] Add producer-scoped job detail and history APIs
+- [ ] Add worker-scoped assignment and attempt-history APIs
 - [ ] Add global Admin job, worker, queue, and dead-letter APIs
 - [ ] Combine PostgreSQL analytics with Prometheus trends
-- [ ] Build Admin and Publisher dashboard pages
+- [ ] Build Admin, Publisher, Producer, and Worker dashboard pages
 
 ## Phase 8 — Running the system
 
@@ -168,3 +174,6 @@ This is the working checklist for implementation. We complete and verify each it
 | 2026-08-28 | Secure result storage added | Added private MinIO result storage, lease-authorized signed PUT URLs, automatic JSON result uploads, attempt-scoped reference validation, and real MinIO integration coverage; all 104 tests pass |
 | 2026-08-28 | Structured observability foundation added | Added redacted JSON logs, lifecycle events across every process, request correlation IDs, stable API error codes, validation envelopes, and secret-redaction tests; all 106 tests pass |
 | 2026-08-29 | Prometheus metrics added | Added protected API scraping, private process metric servers, low-cardinality lifecycle counters and latency histograms, and authoritative PostgreSQL/Redis state gauges; all 109 tests pass |
+| 2026-08-29 | Dashboard visibility model locked | Defined immutable Publisher and Producer job ownership, Worker attempt ownership, global Admin access, role-scoped metrics, and explicit secret and payload boundaries |
+| 2026-08-29 | Identity and ownership persistence added | Added users, multi-role assignments, versioned job types, Producer-scoped idempotency, database-enforced Publisher ownership, immutable job ownership snapshots, Worker Agent ownership, migrations `0006`–`0007`, and integration coverage; all 113 tests pass with no Alembic drift |
+| 2026-08-29 | Human authentication added | Added Argon2id password hashes, revocable PostgreSQL browser sessions, secure session cookies, double-submit CSRF validation, login/logout/current-user APIs, a user-creation CLI, migration `0008`, and authentication coverage; all 119 tests pass with no Alembic drift |

@@ -528,8 +528,85 @@ The API owns authoritative current-state gauges for jobs, workers, and Redis que
 
 Terminology:
 
-- **Publisher user:** authenticated product user who owns or submits jobs.
+- **Publisher user:** authenticated product user who creates and owns job types and their approved handlers.
+- **Producer:** authenticated product user who submits jobs using an existing job type.
+- **Worker:** execution agent that can access only its assigned work through the Worker Gateway.
+- **Admin:** platform operator with global visibility and management access.
 - **Outbox Publisher:** internal process that transfers durable PostgreSQL events to Redis.
+
+---
+
+# 12. Who can see jobs and metrics?
+
+## Options
+
+### Separate role dashboards without ownership rules
+
+- **Pro:** quick to build
+- **Con:** authorization becomes inconsistent and can expose unrelated jobs
+
+### Ownership-scoped views backed by one authorization model
+
+- **Pro:** every query follows explicit, testable ownership relationships
+- **Pro:** the same APIs can safely support Admin, Publisher, Producer, and Worker dashboards
+- **Con:** requires identity, ownership, and authorization data in PostgreSQL
+
+## Decision
+
+### Choose: Ownership-scoped views backed by PostgreSQL
+
+The access graph is:
+
+```text
+Publisher ──owns──> Job Type ──defines──> Jobs
+Producer  ─submits──────────────────────> Job
+Worker user ─owns──> Worker Agent ─executes──> Job Attempt
+Admin     ─manages──────────────────────> Entire platform
+```
+
+Each job stores immutable `publisher_id`, `producer_id`, and `job_type_id` ownership references at submission. Each attempt stores its `worker_id`, and every registered Worker Agent stores its owning `owner_user_id`. Keeping an ownership snapshot on the job preserves historical authorization and auditability if a job type later changes ownership.
+
+PostgreSQL enforces that the referenced Job Type belongs to the recorded Publisher and rejects changes to a job's three ownership fields after insertion. Idempotency keys are unique per Producer, so separate Producers may safely use the same client-generated key. Until Producer authentication is applied to job routes, those compatibility routes use an explicit bootstrap system user and legacy Job Type.
+
+| Actor | Can see | Cannot see |
+|---|---|---|
+| Admin | All users, job types, jobs, payloads, results, attempts, workers, queues, dead letters, and platform metrics | Recover password hashes, previously issued token values, or permanent infrastructure secrets |
+| Publisher | Owned job types; every job created from them; payloads, results, errors, attempts, relevant workers, and aggregated metrics for those job types | Other publishers' data, worker credentials, infrastructure credentials, or unrestricted raw Prometheus access |
+| Producer | Every detail for jobs they submitted: request, lifecycle, result, errors, attempts, and job-scoped timings | Other producers' jobs, unrelated job-type analytics, worker credentials, or platform-wide controls |
+| Worker | Its profile, active assignments, and its own attempt history, outcomes, errors, and timings | Other workers' history, unrelated jobs, direct PostgreSQL/Redis/storage access, or historical payload/result access by default |
+
+“Everything” means all authorized product and operational details. It never includes passwords, credential hashes, bearer tokens, lease tokens, signed URLs, or PostgreSQL, Redis, and object-storage credentials. Sensitive values are redacted even for Admin; credentials can be revoked or rotated, not recovered.
+
+Publisher and Producer totals come from PostgreSQL because they require exact ownership filtering. Prometheus remains a low-cardinality operational source. The Dashboard API combines these sources and applies authorization; browsers never query PostgreSQL, Redis, or Prometheus directly.
+
+Worker payload access is temporary and assignment-scoped through the Worker Gateway. The dashboard shows safe job metadata and the worker's own execution record. Retaining payload or result access after execution requires an explicit job-type policy.
+
+---
+
+# 13. How do dashboard users authenticate?
+
+## Options
+
+### Self-contained JWT access tokens
+
+- **Pro:** verification does not require a database lookup
+- **Con:** immediate logout, revocation, and role changes require additional infrastructure
+
+### Revocable server-side sessions
+
+- **Pro:** logout, account disabling, and permission changes take effect immediately
+- **Pro:** simple for a same-origin dashboard
+- **Con:** each authenticated request reads session state
+
+## Decision
+
+### Choose: Revocable PostgreSQL-backed browser sessions
+
+Users log in with email and password. Passwords are stored only as Argon2id hashes. Successful login creates independent cryptographically random session and CSRF tokens; PostgreSQL stores only their SHA-256 hashes.
+
+The raw session token is sent in a `Secure`, `HttpOnly`, `SameSite=Lax` cookie. State-changing dashboard requests must also send the CSRF token from its readable cookie in the `X-CSRF-Token` header. Logout revokes the database session and clears both cookies. Expired sessions, revoked sessions, disabled users, and invalid passwords are rejected with generic errors.
+
+Browser sessions authenticate humans only. Producer API keys, Worker Agent credentials, the metrics token, and internal process credentials remain separate credential classes with narrower permissions.
 
 ---
 

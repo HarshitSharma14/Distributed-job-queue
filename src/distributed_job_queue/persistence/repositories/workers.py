@@ -7,6 +7,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from distributed_job_queue.domain.worker import WorkerStatus
+from distributed_job_queue.domain.identity import BOOTSTRAP_USER_ID
 from distributed_job_queue.persistence.models import Worker
 
 
@@ -15,7 +16,12 @@ class WorkerRepository:
         self.session = session
 
     def register(
-        self, worker_id: str, *, capabilities: list[str], now: datetime
+        self,
+        worker_id: str,
+        *,
+        capabilities: list[str],
+        now: datetime,
+        owner_user_id: str = BOOTSTRAP_USER_ID,
     ) -> Worker:
         if not worker_id:
             raise ValueError("worker_id must not be empty")
@@ -24,6 +30,7 @@ class WorkerRepository:
             insert(Worker)
             .values(
                 id=worker_id,
+                owner_user_id=owner_user_id,
                 capabilities=normalized_capabilities,
                 status=WorkerStatus.ONLINE.value,
                 last_heartbeat_at=now,

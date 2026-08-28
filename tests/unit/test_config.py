@@ -11,6 +11,8 @@ def test_load_settings_uses_development_defaults():
     assert settings.environment == "development"
     assert settings.api_host == "0.0.0.0"
     assert settings.api_port == 8000
+    assert settings.auth_session_hours == 12
+    assert settings.auth_cookie_secure is False
     assert settings.database_url.startswith("postgresql+")
     assert settings.job_lease_seconds == 60
     assert settings.worker_long_poll_seconds == 20
@@ -33,6 +35,8 @@ def test_load_settings_parses_environment_values(monkeypatch):
     monkeypatch.setenv("APP_DEBUG", "true")
     monkeypatch.setenv("API_HOST", "127.0.0.1")
     monkeypatch.setenv("API_PORT", "9000")
+    monkeypatch.setenv("AUTH_SESSION_HOURS", "24")
+    monkeypatch.setenv("AUTH_COOKIE_SECURE", "true")
     monkeypatch.setenv("JOB_LEASE_SECONDS", "90")
     monkeypatch.setenv("WORKER_LONG_POLL_SECONDS", "15")
     monkeypatch.setenv("WORKER_GATEWAY_TOKEN", "test-worker-token")
@@ -52,6 +56,8 @@ def test_load_settings_parses_environment_values(monkeypatch):
     assert settings.debug is True
     assert settings.api_host == "127.0.0.1"
     assert settings.api_port == 9000
+    assert settings.auth_session_hours == 24
+    assert settings.auth_cookie_secure is True
     assert settings.job_lease_seconds == 90
     assert settings.worker_long_poll_seconds == 15
     assert settings.worker_gateway_token == "test-worker-token"

@@ -16,6 +16,7 @@ distributed_job_queue/
 ├── src/
 │   └── distributed_job_queue/
 │       ├── api/
+│       ├── auth/
 │       ├── common/
 │       ├── domain/
 │       ├── persistence/
@@ -41,15 +42,19 @@ Main application package. Production code lives here.
 
 ### `api/`
 
-FastAPI application and process runner. `schemas.py` defines public and worker-gateway contracts, while `dependencies.py` owns request-scoped transactions, internal Redis construction, and the temporary worker-token boundary. `services.py` coordinates producer-facing job operations. `worker_gateway_services.py` owns worker presence, claim handoff, lease renewal, and idempotent terminal reporting. `routes.py` exposes producer-facing HTTP operations; `worker_gateway_routes.py` exposes the complete worker control protocol: registration, heartbeat, claim, renewal, completion, and failure. Business rules do not belong in route handlers.
+FastAPI application and process runner. Authentication routes expose login, logout, and current-user identity, while authentication dependencies resolve revocable browser sessions and enforce CSRF protection. `schemas.py` defines public and worker-gateway contracts, while `dependencies.py` owns request-scoped transactions, internal Redis construction, and the temporary worker-token boundary. `services.py` coordinates producer-facing job operations. `worker_gateway_services.py` owns worker presence, claim handoff, lease renewal, and idempotent terminal reporting. `routes.py` exposes producer-facing HTTP operations; `worker_gateway_routes.py` exposes the complete worker control protocol: registration, heartbeat, claim, renewal, completion, and failure. Business rules do not belong in route handlers.
+
+### `auth/`
+
+Human authentication primitives and services. Passwords use Argon2id, opaque session and CSRF tokens are generated cryptographically, and only token hashes are persisted. The CLI creates initial users without placing passwords in shell history.
 
 ### `domain/`
 
-Core concepts and rules: job entities, statuses, state transitions, worker capabilities, and capped exponential retry timing with jitter. This package remains independent of HTTP, Redis, and database details.
+Core concepts and rules: job entities, statuses, state transitions, user roles, job-type status, worker capabilities, and capped exponential retry timing with jitter. This package remains independent of HTTP, Redis, and database details.
 
 ### `persistence/`
 
-SQLAlchemy models, database sessions, migrations integration, and repositories for jobs, attempts, workers, results, and durable dead-letter records.
+SQLAlchemy models, database sessions, migrations integration, and repositories for users, role assignments, versioned job types, jobs, attempts, workers, results, and durable dead-letter records. Job rows retain immutable `job_type_id`, `publisher_id`, and `producer_id` ownership snapshots, while each Worker Agent references its owning user. Producer-scoped idempotency and the Job Type-to-Publisher relationship are enforced by PostgreSQL.
 
 ### `queueing/`
 

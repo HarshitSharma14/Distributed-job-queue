@@ -303,6 +303,8 @@ API Errors:          Stable coded JSON envelope with request IDs
 Metrics Client:      Prometheus Python client
 Metrics Storage:     Grafana Cloud Free or local Prometheus
 Dashboard Analytics: PostgreSQL exact data + Prometheus operational trends
+Password Hashing:    Argon2id via argon2-cffi
+Browser Auth:        Opaque PostgreSQL sessions + secure cookies + CSRF tokens
 ```
 
 ## Final architecture with technologies

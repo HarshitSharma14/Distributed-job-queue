@@ -10,6 +10,7 @@ from sqlalchemy import exists, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from distributed_job_queue.domain.job import JobStatus, transition_job
+from distributed_job_queue.domain.identity import BOOTSTRAP_JOB_TYPE_ID, BOOTSTRAP_USER_ID
 from distributed_job_queue.persistence.models import Job, JobAttempt, OutboxEvent
 
 
@@ -34,8 +35,14 @@ class JobRepository:
         available_at: datetime | None = None,
         idempotency_key: str | None = None,
         request_hash: str | None = None,
+        job_type_id: str = BOOTSTRAP_JOB_TYPE_ID,
+        publisher_id: str = BOOTSTRAP_USER_ID,
+        producer_id: str = BOOTSTRAP_USER_ID,
     ) -> Job:
         job = Job(
+            job_type_id=job_type_id,
+            publisher_id=publisher_id,
+            producer_id=producer_id,
             type=job_type,
             queue=queue,
             payload=payload,
@@ -55,8 +62,13 @@ class JobRepository:
     def get(self, job_id: str) -> Job | None:
         return self.session.get(Job, job_id)
 
-    def get_by_idempotency_key(self, idempotency_key: str) -> Job | None:
-        statement = select(Job).where(Job.idempotency_key == idempotency_key)
+    def get_by_idempotency_key(
+        self, idempotency_key: str, *, producer_id: str = BOOTSTRAP_USER_ID
+    ) -> Job | None:
+        statement = select(Job).where(
+            Job.producer_id == producer_id,
+            Job.idempotency_key == idempotency_key,
+        )
         return self.session.scalars(statement).one_or_none()
 
     def get_with_attempts(self, job_id: str) -> Job | None:

@@ -9,6 +9,7 @@ description = "A distributed job processing platform"
 requires-python = ">=3.11"
 dependencies = [
     "alembic>=1.13,<2.0",
+    "argon2-cffi>=25.1,<26.0",
     "fastapi>=0.115,<1.0",
     "httpx>=0.27,<1.0",
     "minio>=7.2,<8.0",
@@ -31,6 +32,7 @@ job-worker = "distributed_job_queue.workers.runner:main"
 job-scheduler = "distributed_job_queue.scheduler.runner:main"
 worker-monitor = "distributed_job_queue.recovery.runner:main"
 recovery-monitor = "distributed_job_queue.recovery.runner:main"
+djq-create-user = "distributed_job_queue.auth.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
