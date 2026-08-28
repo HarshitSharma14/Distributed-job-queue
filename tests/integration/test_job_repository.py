@@ -181,7 +181,7 @@ def test_stale_fencing_token_cannot_complete_job(repository):
     assert stored.status == JobStatus.RUNNING.value
 
 
-def test_expired_final_attempt_is_not_requeued(repository):
+def test_expired_final_attempt_is_dead_lettered(repository):
     job_repository, session = repository
     worker = Worker(id="exhausted-worker", capabilities=["reports"])
     session.add(worker)
@@ -206,8 +206,63 @@ def test_expired_final_attempt_is_not_requeued(repository):
     )
 
     assert [item.id for item in recovered] == [job.id]
-    assert job.status == JobStatus.FAILED.value
+    assert job.status == JobStatus.DEAD_LETTERED.value
+    assert job.dead_lettered_at == expired_at
     events = list(
         session.scalars(select(OutboxEvent).where(OutboxEvent.job_id == job.id))
     )
     assert len(events) == 1
+
+
+def test_job_is_dead_lettered_after_retry_exhaustion(repository):
+    job_repository, _ = repository
+    worker = Worker(id="retry-exhaustion-worker", capabilities=["reports"])
+    job_repository.session.add(worker)
+    job = job_repository.create(
+        job_type="generate_report",
+        queue="reports",
+        payload={},
+        max_attempts=2,
+    )
+    job_repository.transition(job, JobStatus.QUEUED)
+
+    first_started_at = datetime.now(timezone.utc)
+    job_repository.mark_running(
+        job.id,
+        worker_id=worker.id,
+        lease_token="first-exhaustion-token",
+        lease_expires_at=first_started_at + timedelta(minutes=1),
+    )
+    retry_at = first_started_at + timedelta(seconds=5)
+    first_failure = job_repository.fail_execution(
+        job.id,
+        worker_id=worker.id,
+        lease_token="first-exhaustion-token",
+        error={"type": "TemporaryError", "message": "try again"},
+        now=first_started_at,
+        retry_at=retry_at,
+    )
+    assert first_failure.status == JobStatus.RETRY_WAIT.value
+
+    job_repository.release_due_retries(now=retry_at, limit=1)
+    second_started_at = retry_at + timedelta(seconds=1)
+    job_repository.mark_running(
+        job.id,
+        worker_id=worker.id,
+        lease_token="second-exhaustion-token",
+        lease_expires_at=second_started_at + timedelta(minutes=1),
+    )
+    final = job_repository.fail_execution(
+        job.id,
+        worker_id=worker.id,
+        lease_token="second-exhaustion-token",
+        error={"type": "PermanentError", "message": "still failing"},
+        now=second_started_at,
+        retry_at=second_started_at + timedelta(seconds=10),
+    )
+
+    assert final.status == JobStatus.DEAD_LETTERED.value
+    assert final.attempts == final.max_attempts == 2
+    assert final.dead_lettered_at == second_started_at
+    assert final.worker_id is None
+    assert final.lease_token is None

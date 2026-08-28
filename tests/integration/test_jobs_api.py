@@ -158,6 +158,7 @@ def test_get_job_returns_authoritative_state(api_context):
     assert body["payload"] == {"report_id": 42}
     assert body["attempt_count"] == 0
     assert body["attempt_history"] == []
+    assert body["dead_lettered_at"] is None
     assert "lease_token" not in body
 
 

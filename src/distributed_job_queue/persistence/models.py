@@ -73,6 +73,9 @@ class Job(Base):
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    dead_lettered_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     worker: Mapped[Worker | None] = relationship(back_populates="jobs")
     attempts_history: Mapped[list[JobAttempt]] = relationship(

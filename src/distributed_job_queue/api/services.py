@@ -131,6 +131,7 @@ def get_job_detail(session: Session, job_id: str) -> JobDetailResponse | None:
         created_at=job.created_at,
         updated_at=job.updated_at,
         completed_at=job.completed_at,
+        dead_lettered_at=job.dead_lettered_at,
         attempt_history=[
             JobAttemptResponse(
                 attempt_number=attempt.attempt_number,

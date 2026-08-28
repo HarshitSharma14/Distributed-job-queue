@@ -48,7 +48,7 @@ Core concepts and rules: job entities, statuses, state transitions, worker capab
 
 ### `persistence/`
 
-SQLAlchemy models, database sessions, migrations integration, and repositories for jobs, attempts, workers, and results.
+SQLAlchemy models, database sessions, migrations integration, and repositories for jobs, attempts, workers, results, and durable dead-letter records.
 
 ### `queueing/`
 
@@ -68,7 +68,7 @@ Releases durable retries when their PostgreSQL `available_at` time arrives. It l
 
 ### `recovery/`
 
-PostgreSQL-authoritative health and recovery process. It marks workers offline after their heartbeat deadline, locks expired `RUNNING` jobs, fails and fences their active attempts, clears ownership, and moves recoverable jobs to `RETRY_WAIT`. Retry exhaustion and dead-letter handling also live here.
+PostgreSQL-authoritative health and recovery process. It marks workers offline after their heartbeat deadline, locks expired `RUNNING` jobs, fails and fences their active attempts, clears ownership, moves recoverable jobs to `RETRY_WAIT`, and dead-letters exhausted jobs.
 
 ### `common/`
 

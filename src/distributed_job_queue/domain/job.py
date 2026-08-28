@@ -23,7 +23,12 @@ ALLOWED_TRANSITIONS: dict[JobStatus, frozenset[JobStatus]] = {
     JobStatus.CREATED: frozenset({JobStatus.QUEUED}),
     JobStatus.QUEUED: frozenset({JobStatus.RUNNING}),
     JobStatus.RUNNING: frozenset(
-        {JobStatus.COMPLETED, JobStatus.RETRY_WAIT, JobStatus.FAILED}
+        {
+            JobStatus.COMPLETED,
+            JobStatus.RETRY_WAIT,
+            JobStatus.FAILED,
+            JobStatus.DEAD_LETTERED,
+        }
     ),
     JobStatus.RETRY_WAIT: frozenset({JobStatus.QUEUED}),
     JobStatus.COMPLETED: frozenset(),

@@ -590,11 +590,12 @@ def test_gateway_marks_exhausted_failure_terminal(claim_gateway_context):
     )
 
     assert response.status_code == 200
-    assert response.json()["status"] == JobStatus.FAILED.value
+    assert response.json()["status"] == JobStatus.DEAD_LETTERED.value
     session.expire_all()
     failed = session.get(Job, job.id)
     assert failed is not None
-    assert failed.status == JobStatus.FAILED.value
+    assert failed.status == JobStatus.DEAD_LETTERED.value
+    assert failed.dead_lettered_at is not None
 
 
 def test_gateway_completion_remains_durable_when_redis_lease_is_missing(

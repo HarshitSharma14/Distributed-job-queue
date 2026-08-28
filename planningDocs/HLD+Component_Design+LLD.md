@@ -240,7 +240,7 @@ Only defined transitions are accepted.
 ```text
 CREATED → QUEUED → RUNNING → COMPLETED
                          ├→ RETRY_WAIT → QUEUED
-                         └→ FAILED → DEAD_LETTERED
+                         └→ DEAD_LETTERED
 ```
 
 State meanings:
@@ -250,8 +250,8 @@ State meanings:
 - `RUNNING`: claimed with an active lease.
 - `RETRY_WAIT`: failed and waiting for its next attempt.
 - `COMPLETED`: finished successfully.
-- `FAILED`: permanently failed or awaiting dead-letter handling.
-- `DEAD_LETTERED`: exhausted its retry limit.
+- `FAILED`: an execution-attempt outcome retained in attempt history.
+- `DEAD_LETTERED`: the job exhausted its retry limit and is retained for inspection.
 
 Workers can complete or fail a job only while they own its active lease.
 
@@ -668,10 +668,10 @@ Worker Processes
 
 Scheduler / Recovery Monitor
   ├─ release delayed and retryable jobs
-  ├─ recover expired PostgreSQL leases through the outbox
+  ├─ recover expired PostgreSQL leases through retry backoff
   ├─ return timed-out pre-database claims from Redis in-flight to ready
   ├─ reconcile PostgreSQL QUEUED jobs after Redis data loss
-  └─ move exhausted jobs to the dead-letter queue
+  └─ retain exhausted jobs in PostgreSQL as DEAD_LETTERED
 ```
 
 ## Final decisions locked

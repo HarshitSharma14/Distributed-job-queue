@@ -267,7 +267,7 @@ def fail_gateway_job(
             queue_name = existing.queue
             replayed = existing.status in {
                 JobStatus.RETRY_WAIT.value,
-                JobStatus.FAILED.value,
+                JobStatus.DEAD_LETTERED.value,
             }
             now = datetime.now(timezone.utc)
             retry_at = retry_available_at(

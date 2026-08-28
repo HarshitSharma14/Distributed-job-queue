@@ -227,7 +227,7 @@ class JobRepository:
         target = (
             JobStatus.RETRY_WAIT
             if job.attempts < job.max_attempts
-            else JobStatus.FAILED
+            else JobStatus.DEAD_LETTERED
         )
         transition_job(JobStatus.RUNNING, target)
         if target == JobStatus.RETRY_WAIT and retry_at is None:
@@ -236,6 +236,8 @@ class JobRepository:
         job.error = error
         if retry_at is not None and target == JobStatus.RETRY_WAIT:
             job.available_at = retry_at
+        if target == JobStatus.DEAD_LETTERED:
+            job.dead_lettered_at = now
         self._clear_lease(job)
         self.session.flush()
         return job
@@ -273,12 +275,14 @@ class JobRepository:
                 finished_at=now,
             )
             exhausted = job.attempts >= job.max_attempts
-            target = JobStatus.FAILED if exhausted else JobStatus.RETRY_WAIT
+            target = JobStatus.DEAD_LETTERED if exhausted else JobStatus.RETRY_WAIT
             transition_job(JobStatus.RUNNING, target)
             job.status = target.value
             job.error = lease_error
             if not exhausted:
                 job.available_at = retry_at_for_attempt(job.attempts)
+            else:
+                job.dead_lettered_at = now
             self._clear_lease(job)
         self.session.flush()
         return jobs
@@ -453,7 +457,8 @@ class JobRepository:
             lease_token=lease_token,
         )
         if (
-            job.status not in {JobStatus.RETRY_WAIT.value, JobStatus.FAILED.value}
+            job.status
+            not in {JobStatus.RETRY_WAIT.value, JobStatus.DEAD_LETTERED.value}
             or attempt.status != JobStatus.FAILED.value
             or attempt.error != error
         ):

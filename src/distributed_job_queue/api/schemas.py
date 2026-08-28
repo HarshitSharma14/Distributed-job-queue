@@ -60,6 +60,7 @@ class JobDetailResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     completed_at: datetime | None
+    dead_lettered_at: datetime | None
     attempt_history: list[JobAttemptResponse]
 
 

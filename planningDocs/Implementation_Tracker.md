@@ -4,9 +4,9 @@ This is the working checklist for implementation. We complete and verify each it
 
 ## Current focus
 
-- **Current phase:** Phase 6 — Reliability
-- **Next step:** Implement dead-letter handling for jobs that exhaust their attempts
-- **Current milestone:** The recovery monitor fences expired attempts, marks stale workers offline, and sends recoverable jobs through durable backoff; 96 tests pass
+- **Current phase:** Phase 7 — Results and operations
+- **Next step:** Add MinIO-backed result storage and temporary result references
+- **Current milestone:** Exhausted jobs are durably dead-lettered with timestamps and complete attempt history; 97 tests pass
 
 ## Phase 1 — Project foundation
 
@@ -87,9 +87,9 @@ This is the working checklist for implementation. We complete and verify each it
 - [x] Implement the `RETRY_WAIT` state transition
 - [x] Implement the scheduler
 - [x] Implement the recovery monitor
-- [ ] Implement dead-letter handling
+- [x] Implement dead-letter handling
 - [x] Test worker crashes and expired leases
-- [ ] Test retry exhaustion
+- [x] Test retry exhaustion
 
 ## Phase 7 — Results and operations
 
@@ -115,7 +115,7 @@ This is the working checklist for implementation. We complete and verify each it
 - [ ] Store its result
 - [ ] Retry a failed job with backoff
 - [ ] Recover a job after a worker crash
-- [ ] Move permanently failed jobs to the dead-letter queue
+- [x] Move permanently failed jobs to the dead-letter queue
 - [ ] Run the full system with Docker Compose
 
 ## Progress notes
@@ -155,3 +155,4 @@ This is the working checklist for implementation. We complete and verify each it
 | 2026-08-28 | Worker runtime isolated from infrastructure | Added the HTTP Gateway client and refactored registration, heartbeat, claim, renewal, completion, and failure so worker code imports neither Redis nor PostgreSQL; all 85 tests pass |
 | 2026-08-28 | Durable retry scheduling added | Added capped exponential backoff with jitter, persisted retry availability, concurrent-safe scheduler batches, transactional outbox release, process configuration, and retry integration tests; all 95 tests pass |
 | 2026-08-28 | Expired-lease recovery added | Added PostgreSQL-authoritative worker crash recovery, attempt fencing, stale-worker detection, durable retry backoff, batch processing, and process configuration; all 96 tests pass |
+| 2026-08-28 | Dead-letter handling added | Added terminal `DEAD_LETTERED` state, durable timestamps, migration of exhausted failures, API visibility, idempotent failure replay, and multi-attempt exhaustion coverage; all 97 tests pass |
