@@ -16,8 +16,15 @@ class UserRole(StrEnum):
 
 
 class JobTypeStatus(StrEnum):
+    DRAFT = "DRAFT"
     ACTIVE = "ACTIVE"
     DISABLED = "DISABLED"
+
+
+class HandlerArtifactStatus(StrEnum):
+    PENDING = "PENDING"
+    VERIFIED = "VERIFIED"
+    REJECTED = "REJECTED"
 
 
 # Temporary ownership used by the unauthenticated API until user authentication lands.

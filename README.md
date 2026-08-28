@@ -53,7 +53,7 @@ Username: minioadmin
 Password: minioadmin
 ```
 
-The `job-results` bucket should exist and remain private.
+The `job-results` and `handler-artifacts` buckets should exist and remain private.
 
 ### Stop services
 
@@ -109,12 +109,15 @@ job-api
 Submit an immediate job:
 
 ```bash
+export PRODUCER_API_KEY='djq_prod_...'
+export JOB_TYPE_ID='job-type-uuid'
+
 curl -X POST http://localhost:8000/jobs \
   -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer ${PRODUCER_API_KEY}" \
   -H 'Idempotency-Key: report-request-42' \
   -d '{
-    "type": "generate_report",
-    "queue": "reports",
+    "job_type_id": "'"${JOB_TYPE_ID}"'",
     "payload": {"report_id": 42},
     "priority": 8,
     "max_attempts": 3
@@ -128,7 +131,8 @@ Retrying the same request with the same `Idempotency-Key` returns the original j
 Read the authoritative job state and execution history:
 
 ```bash
-curl http://localhost:8000/jobs/<job_id>
+curl http://localhost:8000/jobs/<job_id> \
+  -H "Authorization: Bearer ${PRODUCER_API_KEY}"
 ```
 
 ## Operational metrics

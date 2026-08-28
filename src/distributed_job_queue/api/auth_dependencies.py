@@ -114,6 +114,25 @@ def require_job_read_principal(
     return principal
 
 
+def require_publisher_principal(
+    principal: Annotated[AuthenticatedPrincipal, Depends(require_current_principal)],
+) -> AuthenticatedPrincipal:
+    if principal.roles.isdisjoint({UserRole.ADMIN, UserRole.PUBLISHER}):
+        raise APIError(
+            status_code=status.HTTP_403_FORBIDDEN,
+            code="PUBLISHER_ROLE_REQUIRED",
+            message="Publisher role required",
+        )
+    return principal
+
+
+def require_publisher_write_principal(
+    request: Request,
+    principal: Annotated[AuthenticatedPrincipal, Depends(require_publisher_principal)],
+) -> AuthenticatedPrincipal:
+    return _validate_csrf(request, principal)
+
+
 def _validate_csrf(
     request: Request, principal: AuthenticatedPrincipal
 ) -> AuthenticatedPrincipal:

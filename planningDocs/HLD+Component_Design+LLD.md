@@ -612,6 +612,45 @@ Worker Agent credentials, the metrics token, and internal process credentials re
 
 ---
 
+# 14. How are Job Types managed?
+
+## Options
+
+### Mutable Job Type records
+
+- **Pro:** simple editing experience
+- **Con:** old jobs can silently point to a changed handler definition
+
+### Immutable versioned definitions with lifecycle states
+
+- **Pro:** preserves execution history and makes handler changes auditable
+- **Pro:** unsafe or incomplete definitions cannot receive jobs
+- **Con:** changes require a new version instead of editing active history
+
+## Decision
+
+### Choose: Publisher-owned, versioned Job Types with controlled activation
+
+Publishers create Job Types as `DRAFT`. Publisher queries are ownership-scoped, while Admin can inspect all definitions. A Publisher may disable its definitions, but definitions are never deleted because historical jobs retain their `job_type_id`.
+
+```text
+DRAFT
+  │ approved handler artifact attached
+  ▼
+ACTIVE
+  │ Publisher or Admin disables new submissions
+  ▼
+DISABLED
+```
+
+Only `ACTIVE` Job Types accept new jobs. A Publisher reserves an attempt-scoped object key by declaring the bundle's size and SHA-256 digest, receives a short-lived signed upload URL, and uploads without MinIO credentials. Verification enforces the reserved size and digest, a valid ZIP structure, safe relative paths, no symbolic links or duplicate paths, bounded uncompressed size, and a matching manifest and Python entrypoint.
+
+Verified bytes are copied to a content-addressed object key that was never exposed through an upload URL. The Job Type references only this promoted key, so reusing an unexpired upload URL cannot replace active handler code. Successful verification performs the controlled `DRAFT → ACTIVE` transition; rejected artifacts remain auditable and the Job Type stays `DRAFT`.
+
+These checks prove integrity and package structure, not that Publisher code is harmless. Signature policy, platform approval, runtime sandboxing, and safe Worker distribution remain separate controls before arbitrary external workers execute downloaded handlers.
+
+---
+
 # Runtime Flows
 
 These flows describe the normal and failure paths the implementation must support.

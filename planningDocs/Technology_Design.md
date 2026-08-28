@@ -296,6 +296,7 @@ Control Communication: Worker Gateway REST API
 Worker HTTP Client:   httpx
 Worker Infrastructure Access: None
 Result Storage:      MinIO
+Handler Storage:     Private MinIO bucket with signed uploads and immutable promotion
 Deployment:          Docker Compose
 Testing:             Pytest
 Logging:             Python logging with redacted JSON output

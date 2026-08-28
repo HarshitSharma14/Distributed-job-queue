@@ -52,6 +52,10 @@ class Settings:
     minio_secret_key: str
     minio_bucket: str
     result_upload_url_seconds: int
+    minio_handler_bucket: str
+    handler_upload_url_seconds: int
+    handler_max_bytes: int
+    handler_max_uncompressed_bytes: int
     metrics_token: str
     metrics_port: int
     worker_gateway_url: str
@@ -107,6 +111,18 @@ def load_settings() -> Settings:
         minio_bucket=os.getenv("MINIO_BUCKET", "job-results"),
         result_upload_url_seconds=_get_int(
             "RESULT_UPLOAD_URL_SECONDS", 300, minimum=1
+        ),
+        minio_handler_bucket=os.getenv(
+            "MINIO_HANDLER_BUCKET", "handler-artifacts"
+        ),
+        handler_upload_url_seconds=_get_int(
+            "HANDLER_UPLOAD_URL_SECONDS", 300, minimum=1
+        ),
+        handler_max_bytes=_get_int(
+            "HANDLER_MAX_BYTES", 10 * 1024 * 1024, minimum=1
+        ),
+        handler_max_uncompressed_bytes=_get_int(
+            "HANDLER_MAX_UNCOMPRESSED_BYTES", 50 * 1024 * 1024, minimum=1
         ),
         metrics_token=metrics_token,
         metrics_port=_get_int("METRICS_PORT", 0, minimum=0),

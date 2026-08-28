@@ -19,6 +19,10 @@ def test_load_settings_uses_development_defaults():
     assert settings.worker_gateway_url == "http://localhost:8000"
     assert settings.worker_gateway_token == "dev-worker-token"
     assert settings.result_upload_url_seconds == 300
+    assert settings.minio_handler_bucket == "handler-artifacts"
+    assert settings.handler_upload_url_seconds == 300
+    assert settings.handler_max_bytes == 10 * 1024 * 1024
+    assert settings.handler_max_uncompressed_bytes == 50 * 1024 * 1024
     assert settings.metrics_token == "dev-metrics-token"
     assert settings.metrics_port == 0
     assert settings.max_attempts == 5
@@ -44,6 +48,10 @@ def test_load_settings_parses_environment_values(monkeypatch):
     monkeypatch.setenv("METRICS_PORT", "9100")
     monkeypatch.setenv("WORKER_GATEWAY_URL", "https://queue.example.com")
     monkeypatch.setenv("RESULT_UPLOAD_URL_SECONDS", "120")
+    monkeypatch.setenv("MINIO_HANDLER_BUCKET", "test-handlers")
+    monkeypatch.setenv("HANDLER_UPLOAD_URL_SECONDS", "180")
+    monkeypatch.setenv("HANDLER_MAX_BYTES", "2048")
+    monkeypatch.setenv("HANDLER_MAX_UNCOMPRESSED_BYTES", "8192")
     monkeypatch.setenv("MAX_ATTEMPTS", "3")
     monkeypatch.setenv("SCHEDULER_BATCH_SIZE", "25")
     monkeypatch.setenv("SCHEDULER_POLL_INTERVAL_SECONDS", "2")
@@ -65,6 +73,10 @@ def test_load_settings_parses_environment_values(monkeypatch):
     assert settings.metrics_port == 9100
     assert settings.worker_gateway_url == "https://queue.example.com"
     assert settings.result_upload_url_seconds == 120
+    assert settings.minio_handler_bucket == "test-handlers"
+    assert settings.handler_upload_url_seconds == 180
+    assert settings.handler_max_bytes == 2048
+    assert settings.handler_max_uncompressed_bytes == 8192
     assert settings.max_attempts == 3
     assert settings.scheduler_batch_size == 25
     assert settings.scheduler_poll_interval_seconds == 2

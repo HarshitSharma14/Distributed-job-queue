@@ -23,6 +23,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from distributed_job_queue.domain.job import JobStatus
 from distributed_job_queue.domain.identity import (
     BOOTSTRAP_USER_ID,
+    HandlerArtifactStatus,
     JobTypeStatus,
     UserStatus,
 )
@@ -171,6 +172,52 @@ class JobType(Base):
 
     publisher: Mapped[User] = relationship(back_populates="job_types")
     jobs: Mapped[list[Job]] = relationship(back_populates="job_type_definition")
+    handler_artifacts: Mapped[list[HandlerArtifact]] = relationship(
+        back_populates="job_type", cascade="all, delete-orphan"
+    )
+
+
+class HandlerArtifact(Base):
+    __tablename__ = "handler_artifacts"
+    __table_args__ = (
+        UniqueConstraint("object_ref", name="uq_handler_artifacts_object_ref"),
+        CheckConstraint("expected_size_bytes > 0", name="ck_handler_artifacts_size"),
+        CheckConstraint(
+            "char_length(expected_digest) = 64",
+            name="ck_handler_artifacts_expected_digest_length",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    job_type_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("job_types.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    object_ref: Mapped[str] = mapped_column(Text, nullable=False)
+    verified_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
+    expected_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    expected_size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    actual_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    actual_size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=HandlerArtifactStatus.PENDING.value
+    )
+    rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    upload_expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    job_type: Mapped[JobType] = relationship(back_populates="handler_artifacts")
 
 
 class Job(Base):

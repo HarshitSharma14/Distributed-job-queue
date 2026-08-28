@@ -13,7 +13,7 @@ from distributed_job_queue.common.config import load_settings
 from distributed_job_queue.api.errors import APIError
 from distributed_job_queue.persistence.database import SessionFactory
 from distributed_job_queue.queueing import RedisQueue
-from distributed_job_queue.storage import MinioResultStorage
+from distributed_job_queue.storage import MinioHandlerStorage, MinioResultStorage
 
 worker_bearer = HTTPBearer(auto_error=False)
 metrics_bearer = HTTPBearer(auto_error=False)
@@ -51,6 +51,18 @@ def get_result_storage() -> MinioResultStorage:
         settings.minio_access_key,
         settings.minio_secret_key,
         settings.minio_bucket,
+    )
+
+
+def get_handler_storage() -> MinioHandlerStorage:
+    """Keep handler-bucket credentials inside the platform API."""
+
+    settings = load_settings()
+    return MinioHandlerStorage(
+        settings.minio_endpoint,
+        settings.minio_access_key,
+        settings.minio_secret_key,
+        settings.minio_handler_bucket,
     )
 
 

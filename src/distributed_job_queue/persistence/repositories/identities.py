@@ -1,10 +1,22 @@
 """Persistence operations for users, roles, and job-type definitions."""
 
+from datetime import datetime
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from distributed_job_queue.domain.identity import JobTypeStatus, UserRole, UserStatus
-from distributed_job_queue.persistence.models import JobType, User, UserRoleAssignment
+from distributed_job_queue.domain.identity import (
+    HandlerArtifactStatus,
+    JobTypeStatus,
+    UserRole,
+    UserStatus,
+)
+from distributed_job_queue.persistence.models import (
+    HandlerArtifact,
+    JobType,
+    User,
+    UserRoleAssignment,
+)
 
 
 class IdentityRepository:
@@ -52,13 +64,14 @@ class IdentityRepository:
         version: int = 1,
         handler_ref: str | None = None,
         handler_digest: str | None = None,
+        status: JobTypeStatus = JobTypeStatus.ACTIVE,
     ) -> JobType:
         job_type = JobType(
             publisher_id=publisher_id,
             name=name,
             version=version,
             queue=queue,
-            status=JobTypeStatus.ACTIVE.value,
+            status=status.value,
             handler_ref=handler_ref,
             handler_digest=handler_digest,
         )
@@ -66,5 +79,75 @@ class IdentityRepository:
         self.session.flush()
         return job_type
 
-    def get_job_type(self, job_type_id: str) -> JobType | None:
-        return self.session.get(JobType, job_type_id)
+    def get_job_type(
+        self, job_type_id: str, *, for_update: bool = False
+    ) -> JobType | None:
+        statement = select(JobType).where(JobType.id == job_type_id)
+        if for_update:
+            statement = statement.with_for_update()
+        return self.session.scalars(statement).one_or_none()
+
+    def list_job_types(
+        self, *, publisher_id: str | None = None, limit: int = 100
+    ) -> list[JobType]:
+        statement = select(JobType)
+        if publisher_id is not None:
+            statement = statement.where(JobType.publisher_id == publisher_id)
+        statement = statement.order_by(
+            JobType.created_at.desc(), JobType.name, JobType.version.desc()
+        ).limit(limit)
+        return list(self.session.scalars(statement))
+
+    def get_owned_job_type(
+        self,
+        job_type_id: str,
+        *,
+        publisher_id: str,
+        for_update: bool = False,
+    ) -> JobType | None:
+        statement = select(JobType).where(
+            JobType.id == job_type_id,
+            JobType.publisher_id == publisher_id,
+        )
+        if for_update:
+            statement = statement.with_for_update()
+        return self.session.scalars(statement).one_or_none()
+
+    def disable_job_type(self, job_type: JobType) -> JobType:
+        job_type.status = JobTypeStatus.DISABLED.value
+        self.session.flush()
+        return job_type
+
+    def create_handler_artifact(
+        self,
+        *,
+        artifact_id: str,
+        job_type_id: str,
+        object_ref: str,
+        expected_digest: str,
+        expected_size_bytes: int,
+        upload_expires_at: datetime,
+    ) -> HandlerArtifact:
+        artifact = HandlerArtifact(
+            id=artifact_id,
+            job_type_id=job_type_id,
+            object_ref=object_ref,
+            expected_digest=expected_digest,
+            expected_size_bytes=expected_size_bytes,
+            upload_expires_at=upload_expires_at,
+            status=HandlerArtifactStatus.PENDING.value,
+        )
+        self.session.add(artifact)
+        self.session.flush()
+        return artifact
+
+    def get_handler_artifact(
+        self, artifact_id: str, *, job_type_id: str, for_update: bool = False
+    ) -> HandlerArtifact | None:
+        statement = select(HandlerArtifact).where(
+            HandlerArtifact.id == artifact_id,
+            HandlerArtifact.job_type_id == job_type_id,
+        )
+        if for_update:
+            statement = statement.with_for_update()
+        return self.session.scalars(statement).one_or_none()

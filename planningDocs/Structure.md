@@ -42,7 +42,7 @@ Main application package. Production code lives here.
 
 ### `api/`
 
-FastAPI application and process runner. Authentication routes expose login, logout, current-user identity, and Producer API-key lifecycle operations. Authentication dependencies resolve revocable browser sessions or scoped Producer credentials, enforce CSRF for browser writes, and create the request principal used by ownership checks. `schemas.py` defines public and worker-gateway contracts, while `dependencies.py` owns request-scoped transactions, internal Redis construction, and the temporary worker-token boundary. `services.py` coordinates Producer-authenticated, Job Type-based submission and ownership-filtered job details. `worker_gateway_services.py` owns worker presence, claim handoff, lease renewal, and idempotent terminal reporting. `routes.py` exposes producer-facing HTTP operations; `worker_gateway_routes.py` exposes the complete worker control protocol: registration, heartbeat, claim, renewal, completion, and failure. Business rules do not belong in route handlers.
+FastAPI application and process runner. Authentication routes expose login, logout, current-user identity, and Producer API-key lifecycle operations. Authentication dependencies resolve revocable browser sessions or scoped Producer credentials, enforce CSRF for browser writes, and create the request principal used by ownership checks. Job Type routes and services provide Publisher-owned draft creation, scoped catalog/detail reads, global Admin visibility, non-destructive disabling, signed handler uploads, artifact verification, and controlled activation. `schemas.py` defines public and worker-gateway contracts, while `dependencies.py` owns request-scoped transactions, internal Redis construction, and the temporary worker-token boundary. `services.py` coordinates Producer-authenticated, Job Type-based submission and ownership-filtered job details. `worker_gateway_services.py` owns worker presence, claim handoff, lease renewal, and idempotent terminal reporting. `routes.py` exposes producer-facing HTTP operations; `worker_gateway_routes.py` exposes the complete worker control protocol: registration, heartbeat, claim, renewal, completion, and failure. Business rules do not belong in route handlers.
 
 ### `auth/`
 
@@ -74,7 +74,7 @@ Releases durable retries when their PostgreSQL `available_at` time arrives. It l
 
 ### `storage/`
 
-Private object-storage adapters. The MinIO adapter creates short-lived, attempt-scoped signed uploads while permanent access credentials remain inside the API process. PostgreSQL stores only the resulting opaque object key.
+Private object-storage adapters. The result adapter creates short-lived, attempt-scoped signed uploads. The handler adapter reserves isolated upload keys, verifies bundle integrity and safe ZIP structure, and promotes accepted bytes to content-addressed keys that were never writable through signed upload URLs. Permanent MinIO credentials remain inside the API process, while PostgreSQL stores opaque object references and verification metadata.
 
 ### `recovery/`
 

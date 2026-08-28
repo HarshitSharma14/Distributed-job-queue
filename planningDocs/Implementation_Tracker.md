@@ -5,8 +5,8 @@ This is the working checklist for implementation. We complete and verify each it
 ## Current focus
 
 - **Current phase:** Phase 7.5 — Role-scoped dashboard product
-- **Next step:** Add Publisher Job Type creation and management APIs
-- **Current milestone:** Producer API keys protect Job Type-based submission, while Admin, Publisher, and Producer ownership rules protect job details; 125 tests pass
+- **Next step:** Design safe Worker handler distribution, per-agent credentials, and execution isolation
+- **Current milestone:** Handler bundles use signed uploads, SHA-256 and ZIP/manifest validation, immutable promotion, and controlled Job Type activation; 133 tests pass
 
 ## Phase 1 — Project foundation
 
@@ -77,8 +77,9 @@ This is the working checklist for implementation. We complete and verify each it
 
 - [ ] Define worker credential issuance, expiration, rotation, and revocation
 - [ ] Define publisher, producer, worker, and admin authorization scopes
-- [ ] Define handler approval, signing, versioning, and artifact validation
-- [ ] Return temporary signed URLs for required handler artifacts
+- [ ] Define handler approval, signing, and full versioning policy
+- [x] Validate handler digest, size, ZIP structure, paths, manifest, and entrypoint
+- [x] Return temporary signed upload URLs for handler artifacts
 - [ ] Define handler isolation and sandboxing requirements
 
 ## Phase 6 — Reliability
@@ -108,6 +109,9 @@ This is the working checklist for implementation. We complete and verify each it
 - [x] Apply role and ownership authorization to job submission and detail APIs
 - [ ] Apply role and ownership authorization to remaining product APIs
 - [ ] Replace the shared Worker Gateway token with per-agent credentials
+- [x] Add Publisher Job Type creation, listing, detail, and disable APIs
+- [x] Add handler-artifact upload, integrity/structure verification, immutable promotion, and activation
+- [ ] Add new immutable Job Type version creation
 - [ ] Add publisher-scoped job and analytics APIs
 - [ ] Add producer-scoped job detail and history APIs
 - [ ] Add worker-scoped assignment and attempt-history APIs
@@ -179,3 +183,5 @@ This is the working checklist for implementation. We complete and verify each it
 | 2026-08-29 | Identity and ownership persistence added | Added users, multi-role assignments, versioned job types, Producer-scoped idempotency, database-enforced Publisher ownership, immutable job ownership snapshots, Worker Agent ownership, migrations `0006`–`0007`, and integration coverage; all 113 tests pass with no Alembic drift |
 | 2026-08-29 | Human authentication added | Added Argon2id password hashes, revocable PostgreSQL browser sessions, secure session cookies, double-submit CSRF validation, login/logout/current-user APIs, a user-creation CLI, migration `0008`, and authentication coverage; all 119 tests pass with no Alembic drift |
 | 2026-08-29 | Producer authentication and job authorization added | Added hashed, scoped, expiring, revocable Producer API keys; one-time key disclosure; Job Type-based submissions; Producer-scoped idempotency; Admin, Publisher, and Producer job visibility; migration `0009`; and integration coverage; all 125 tests pass with no Alembic drift |
+| 2026-08-29 | Publisher Job Type management added | Added CSRF-protected draft creation, ownership-scoped catalog and detail APIs, Admin visibility, non-destructive disabling, duplicate-version protection, and rejection of draft submissions; all 128 tests pass with no Alembic drift |
+| 2026-08-29 | Verified handler activation added | Added reserved signed uploads, private handler storage, SHA-256 and size checks, ZIP traversal/symlink/zip-bomb defenses, manifest validation, content-addressed immutable promotion, controlled activation, migrations `0010`–`0011`, and real MinIO coverage; all 133 tests pass with no Alembic drift |
