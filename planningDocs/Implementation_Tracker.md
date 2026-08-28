@@ -5,15 +5,15 @@ This is the working checklist for implementation. We complete and verify each it
 ## Current focus
 
 - **Current phase:** Phase 7 — Results and operations
-- **Next step:** Add structured application logging and shared error handling
-- **Current milestone:** Workers upload handler results to private MinIO through lease-authorized signed URLs without receiving storage credentials; 104 tests pass
+- **Next step:** Add queue, worker, retry, failure, and latency metrics
+- **Current milestone:** All processes emit redacted JSON lifecycle logs, and APIs return correlated errors through one stable contract; 106 tests pass
 
 ## Phase 1 — Project foundation
 
 - [x] Create the application package structure
 - [x] Add configuration management
 - [x] Add dependency management
-- [ ] Add logging and shared error handling
+- [x] Add logging and shared error handling
 - [x] Add the initial test structure
 
 ## Phase 1.5 — Local infrastructure
@@ -95,7 +95,7 @@ This is the working checklist for implementation. We complete and verify each it
 
 - [x] Add MinIO result storage
 - [x] Store result references in PostgreSQL
-- [ ] Add structured logs
+- [x] Add structured logs
 - [ ] Add queue, worker, retry, and failure metrics
 - [ ] Add job and worker status views
 
@@ -157,3 +157,4 @@ This is the working checklist for implementation. We complete and verify each it
 | 2026-08-28 | Expired-lease recovery added | Added PostgreSQL-authoritative worker crash recovery, attempt fencing, stale-worker detection, durable retry backoff, batch processing, and process configuration; all 96 tests pass |
 | 2026-08-28 | Dead-letter handling added | Added terminal `DEAD_LETTERED` state, durable timestamps, migration of exhausted failures, API visibility, idempotent failure replay, and multi-attempt exhaustion coverage; all 97 tests pass |
 | 2026-08-28 | Secure result storage added | Added private MinIO result storage, lease-authorized signed PUT URLs, automatic JSON result uploads, attempt-scoped reference validation, and real MinIO integration coverage; all 104 tests pass |
+| 2026-08-28 | Structured observability foundation added | Added redacted JSON logs, lifecycle events across every process, request correlation IDs, stable API error codes, validation envelopes, and secret-redaction tests; all 106 tests pass |

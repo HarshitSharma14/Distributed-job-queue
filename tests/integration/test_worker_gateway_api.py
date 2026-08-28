@@ -27,6 +27,13 @@ from distributed_job_queue.storage import ResultUpload
 WORKER_TOKEN = "integration-worker-token"
 
 
+def assert_gateway_error(response: httpx.Response, *, code: str, message: str) -> None:
+    error = response.json()["error"]
+    assert error["code"] == code
+    assert error["message"] == message
+    assert error["request_id"] == response.headers["x-request-id"]
+
+
 class RecordingResultStorage:
     def __init__(self) -> None:
         self.calls = []
@@ -193,7 +200,11 @@ def test_worker_gateway_requires_valid_bearer_token(gateway_context, token):
     )
 
     assert response.status_code == 401
-    assert response.json() == {"detail": "Invalid worker token"}
+    assert_gateway_error(
+        response,
+        code="WORKER_UNAUTHORIZED",
+        message="Invalid worker token",
+    )
     assert response.headers["www-authenticate"] == "Bearer"
 
 
@@ -277,7 +288,11 @@ def test_heartbeat_rejects_unknown_worker(gateway_context):
     )
 
     assert response.status_code == 404
-    assert response.json() == {"detail": "Worker not found"}
+    assert_gateway_error(
+        response,
+        code="WORKER_NOT_FOUND",
+        message="Worker not found",
+    )
 
 
 def test_gateway_claims_job_and_persists_running_handoff(claim_gateway_context):
@@ -353,9 +368,11 @@ def test_gateway_claim_rejects_unregistered_worker(claim_gateway_context):
     )
 
     assert response.status_code == 409
-    assert response.json() == {
-        "detail": "Worker missing-worker is not registered"
-    }
+    assert_gateway_error(
+        response,
+        code="WORKER_UNAVAILABLE",
+        message="Worker missing-worker is not registered",
+    )
 
 
 def test_gateway_returns_incompatible_job_to_ready(claim_gateway_context):
@@ -374,9 +391,11 @@ def test_gateway_returns_incompatible_job_to_ready(claim_gateway_context):
     )
 
     assert response.status_code == 409
-    assert response.json() == {
-        "detail": "Worker worker-1 does not support generate_report"
-    }
+    assert_gateway_error(
+        response,
+        code="WORKER_CAPABILITY_MISMATCH",
+        message="Worker worker-1 does not support generate_report",
+    )
     session.expire_all()
     queued = session.get(Job, job.id)
     assert queued is not None
@@ -426,9 +445,11 @@ def test_gateway_rejects_stale_lease_token(claim_gateway_context):
     )
 
     assert response.status_code == 409
-    assert response.json() == {
-        "detail": f"Worker no longer owns job {job.id}"
-    }
+    assert_gateway_error(
+        response,
+        code="WORKER_LEASE_LOST",
+        message=f"Worker no longer owns job {job.id}",
+    )
     session.expire_all()
     running = session.get(Job, job.id)
     assert running is not None
@@ -452,9 +473,11 @@ def test_gateway_reports_lease_loss_when_redis_lease_is_missing(
     )
 
     assert response.status_code == 409
-    assert response.json() == {
-        "detail": f"Worker no longer owns job {job.id}"
-    }
+    assert_gateway_error(
+        response,
+        code="WORKER_LEASE_LOST",
+        message=f"Worker no longer owns job {job.id}",
+    )
 
 
 def test_gateway_rejects_malformed_lease_token(claim_gateway_context):
@@ -542,9 +565,11 @@ def test_gateway_rejects_changed_completion_replay(claim_gateway_context):
     )
 
     assert changed.status_code == 409
-    assert changed.json() == {
-        "detail": "Result reference does not belong to this job attempt"
-    }
+    assert_gateway_error(
+        changed,
+        code="RESULT_REFERENCE_REJECTED",
+        message="Result reference does not belong to this job attempt",
+    )
 
 
 def test_gateway_records_failure_and_accepts_identical_replay(

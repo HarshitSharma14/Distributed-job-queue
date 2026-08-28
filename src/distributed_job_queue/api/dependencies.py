@@ -4,12 +4,13 @@ from collections.abc import Iterator
 from secrets import compare_digest
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from redis import Redis
 from sqlalchemy.orm import Session
 
 from distributed_job_queue.common.config import load_settings
+from distributed_job_queue.api.errors import APIError
 from distributed_job_queue.persistence.database import SessionFactory
 from distributed_job_queue.queueing import RedisQueue
 from distributed_job_queue.storage import MinioResultStorage
@@ -65,8 +66,9 @@ def require_worker_token(
         or credentials.scheme.lower() != "bearer"
         or not compare_digest(credentials.credentials, expected_token)
     ):
-        raise HTTPException(
+        raise APIError(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid worker token",
+            code="WORKER_UNAUTHORIZED",
+            message="Invalid worker token",
             headers={"WWW-Authenticate": "Bearer"},
         )

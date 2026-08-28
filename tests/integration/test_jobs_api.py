@@ -15,6 +15,13 @@ from distributed_job_queue.persistence.models import Job, OutboxEvent, Worker
 from distributed_job_queue.persistence.repositories import JobRepository
 
 
+def assert_api_error(response: httpx.Response, *, code: str, message: str) -> None:
+    error = response.json()["error"]
+    assert error["code"] == code
+    assert error["message"] == message
+    assert error["request_id"] == response.headers["x-request-id"]
+
+
 @pytest.fixture
 def api_context():
     connection = engine.connect()
@@ -204,10 +211,15 @@ def test_get_job_returns_ordered_attempt_history(api_context):
 def test_get_job_returns_not_found_for_unknown_uuid(api_context):
     _ = api_context
 
-    response = api_request("GET", f"/jobs/{uuid4()}")
+    response = api_request(
+        "GET",
+        f"/jobs/{uuid4()}",
+        headers={"X-Request-ID": "client-request-123"},
+    )
 
     assert response.status_code == 404
-    assert response.json() == {"detail": "Job not found"}
+    assert response.headers["x-request-id"] == "client-request-123"
+    assert_api_error(response, code="JOB_NOT_FOUND", message="Job not found")
 
 
 def test_get_job_rejects_malformed_id(api_context):
@@ -216,6 +228,11 @@ def test_get_job_rejects_malformed_id(api_context):
     response = api_request("GET", "/jobs/not-a-uuid")
 
     assert response.status_code == 422
+    assert_api_error(
+        response,
+        code="VALIDATION_ERROR",
+        message="Request validation failed",
+    )
 
 
 def test_submit_job_replays_same_idempotent_request(api_context):
@@ -262,9 +279,11 @@ def test_submit_job_rejects_idempotency_key_reuse_for_different_work(api_context
 
     assert first.status_code == 202
     assert second.status_code == 409
-    assert second.json() == {
-        "detail": "Idempotency-Key was already used for a different request"
-    }
+    assert_api_error(
+        second,
+        code="IDEMPOTENCY_CONFLICT",
+        message="Idempotency-Key was already used for a different request",
+    )
 
 
 def test_submit_job_rejects_invalid_idempotency_key(api_context):

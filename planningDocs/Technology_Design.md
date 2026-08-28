@@ -298,6 +298,8 @@ Worker Infrastructure Access: None
 Result Storage:      MinIO
 Deployment:          Docker Compose
 Testing:             Pytest
+Logging:             Python logging with redacted JSON output
+API Errors:          Stable coded JSON envelope with request IDs
 ```
 
 ## Final architecture with technologies

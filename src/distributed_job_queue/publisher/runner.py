@@ -1,13 +1,17 @@
 """Outbox publisher process entry point."""
 
 import time
+import logging
 
 from redis import Redis
 
 from distributed_job_queue.common.config import load_settings
+from distributed_job_queue.common.logging import configure_logging
 from distributed_job_queue.persistence.database import SessionFactory
 from distributed_job_queue.publisher.service import OutboxPublisher
 from distributed_job_queue.queueing import RedisQueue
+
+logger = logging.getLogger(__name__)
 
 
 def run_once() -> int:
@@ -20,8 +24,14 @@ def run_once() -> int:
 
 def main() -> None:
     settings = load_settings()
+    configure_logging("outbox-publisher", debug=settings.debug)
     while True:
         published = run_once()
+        if published:
+            logger.info(
+                "Published outbox batch",
+                extra={"event": "outbox.batch_published", "count": published},
+            )
         if published == 0:
             time.sleep(settings.outbox_poll_interval_seconds)
 

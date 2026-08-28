@@ -9,6 +9,7 @@ import threading
 from collections.abc import Callable
 
 from distributed_job_queue.common.config import load_settings
+from distributed_job_queue.common.logging import configure_logging
 from distributed_job_queue.workers.consumer import WorkerConsumer
 from distributed_job_queue.workers.executor import LeaseLost, WorkerExecutor
 from distributed_job_queue.workers.gateway_client import WorkerGatewayClient
@@ -62,7 +63,13 @@ def heartbeat_loop(
             if not heartbeat(worker_id):
                 register(worker_id, capabilities)
         except Exception:
-            logger.exception("Worker heartbeat failed", extra={"worker_id": worker_id})
+            logger.exception(
+                "Worker heartbeat failed",
+                extra={
+                    "event": "worker.heartbeat_failed",
+                    "worker_id": worker_id,
+                },
+            )
 
 
 def consume_loop(
@@ -96,6 +103,7 @@ def consume_loop(
                     logger.info(
                         "Job attempt finished",
                         extra={
+                            "event": "job.execution_finished",
                             "job_id": claimed.id,
                             "worker_id": worker_id,
                             "status": outcome.status.value,
@@ -104,18 +112,30 @@ def consume_loop(
             except UnknownJobHandler:
                 logger.exception(
                     "Worker does not support claimed job type",
-                    extra={"worker_id": worker_id, "queue": queue_name},
+                    extra={
+                        "event": "worker.unsupported_job_type",
+                        "worker_id": worker_id,
+                        "queue": queue_name,
+                    },
                 )
                 stop.wait(1)
             except LeaseLost:
                 logger.exception(
                     "Worker lost job ownership during execution",
-                    extra={"worker_id": worker_id, "queue": queue_name},
+                    extra={
+                        "event": "job.lease_lost",
+                        "worker_id": worker_id,
+                        "queue": queue_name,
+                    },
                 )
             except Exception:
                 logger.exception(
                     "Worker iteration failed",
-                    extra={"worker_id": worker_id, "queue": queue_name},
+                    extra={
+                        "event": "worker.iteration_failed",
+                        "worker_id": worker_id,
+                        "queue": queue_name,
+                    },
                 )
                 stop.wait(1)
 
@@ -123,9 +143,10 @@ def consume_loop(
 def main() -> None:
     args = parse_args()
     settings = load_settings()
-    logging.basicConfig(
-        level=logging.DEBUG if settings.debug else logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    configure_logging(
+        "worker",
+        debug=settings.debug,
+        secrets=(settings.worker_gateway_token,),
     )
 
     registry = HandlerRegistry()

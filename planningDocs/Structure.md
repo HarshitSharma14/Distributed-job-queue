@@ -77,7 +77,7 @@ PostgreSQL-authoritative health and recovery process. It marks workers offline a
 
 ### `common/`
 
-Shared configuration, logging, errors, time utilities, IDs, and cross-cutting helpers. Keep this package small to avoid turning it into a catch-all.
+Shared configuration and structured logging. `logging.py` owns JSON formatting, request context, process configuration, and sensitive-value redaction. API-specific error contracts and HTTP correlation middleware remain under `api/`.
 
 ## Test structure
 

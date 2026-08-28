@@ -204,4 +204,8 @@ def _response_detail(response: httpx.Response) -> str:
     except ValueError:
         return response.text or "Unknown gateway error"
     detail = body.get("detail") if isinstance(body, dict) else None
+    if detail is None and isinstance(body, dict):
+        error = body.get("error")
+        if isinstance(error, dict):
+            detail = error.get("message")
     return str(detail or body)

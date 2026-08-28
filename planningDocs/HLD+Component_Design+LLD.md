@@ -500,7 +500,19 @@ Reliability is more important than eliminating every duplicate. Completion, fail
 
 ### Choose: Structured logs, metrics, and job/worker status endpoints
 
-Every event includes `job_id`, `worker_id`, `queue`, `attempt`, `status`, and `duration`.
+Logs are one JSON object per event. Relevant lifecycle events include `job_id`, `worker_id`, `queue`, `attempt_number`, `status`, and duration. HTTP requests receive an `X-Request-ID` that is returned to callers and propagated into logs. Authorization values, permanent credentials, lease tokens, signed URLs, and configured secrets are redacted.
+
+API failures use one stable envelope:
+
+```json
+{
+  "error": {
+    "code": "WORKER_LEASE_LOST",
+    "message": "Worker no longer owns this job",
+    "request_id": "request-123"
+  }
+}
+```
 
 Track:
 

@@ -1,5 +1,6 @@
 """Application operations exposed only through the Worker Gateway."""
 
+import logging
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
@@ -30,6 +31,8 @@ from distributed_job_queue.persistence.repositories import (
 from distributed_job_queue.queueing import JobLease, RedisQueue
 from distributed_job_queue.storage import MinioResultStorage
 
+logger = logging.getLogger(__name__)
+
 
 class WorkerUnavailable(LookupError):
     """Raised when a worker is unknown or not currently online."""
@@ -57,6 +60,14 @@ def register_gateway_worker(
         request.worker_id,
         capabilities=request.capabilities,
         now=now,
+    )
+    logger.info(
+        "Worker registered",
+        extra={
+            "event": "worker.registered",
+            "worker_id": worker.id,
+            "capabilities": worker.capabilities,
+        },
     )
     return WorkerRegistrationResponse(
         worker_id=worker.id,
@@ -138,6 +149,16 @@ def claim_gateway_job(
                 lease_token=lease.token,
                 lease_expires_at=lease_expires_at,
             )
+            logger.info(
+                "Job claimed",
+                extra={
+                    "event": "job.claimed",
+                    "job_id": running.id,
+                    "worker_id": request.worker_id,
+                    "attempt_number": running.attempts,
+                    "queue": running.queue,
+                },
+            )
             return WorkerClaimResponse(
                 job_id=running.id,
                 attempt_number=running.attempts,
@@ -200,6 +221,15 @@ def renew_gateway_lease(
     if not renewed_in_redis:
         raise WorkerLeaseLost(f"Worker no longer owns job {job_id}")
 
+    logger.debug(
+        "Job lease renewed",
+        extra={
+            "event": "job.lease_renewed",
+            "job_id": job_id,
+            "worker_id": request.worker_id,
+            "lease_expires_at": lease_expires_at,
+        },
+    )
     return WorkerLeaseRenewResponse(
         job_id=job_id,
         worker_id=request.worker_id,
@@ -260,6 +290,17 @@ def complete_gateway_job(
         worker_id=request.worker_id,
         lease_token=lease_token,
     )
+    logger.info(
+        "Job completed",
+        extra={
+            "event": "job.completed",
+            "job_id": response.job_id,
+            "worker_id": request.worker_id,
+            "attempt_number": response.attempt_number,
+            "replayed": response.replayed,
+            "has_result": response.result_ref is not None,
+        },
+    )
     return response
 
 
@@ -285,6 +326,16 @@ def create_gateway_result_upload(
         job_id=job.id,
         attempt_number=job.attempts,
         expires_in_seconds=settings.result_upload_url_seconds,
+    )
+    logger.info(
+        "Result upload authorized",
+        extra={
+            "event": "result.upload_authorized",
+            "job_id": job.id,
+            "worker_id": request.worker_id,
+            "attempt_number": job.attempts,
+            "result_ref": upload.result_ref,
+        },
     )
     return WorkerResultUploadResponse(
         job_id=job.id,
@@ -349,6 +400,17 @@ def fail_gateway_job(
         queue_name=queue_name,
         worker_id=request.worker_id,
         lease_token=lease_token,
+    )
+    logger.warning(
+        "Job attempt failed",
+        extra={
+            "event": "job.failed",
+            "job_id": response.job_id,
+            "worker_id": request.worker_id,
+            "attempt_number": response.attempt_number,
+            "status": response.status.value,
+            "replayed": response.replayed,
+        },
     )
     return response
 

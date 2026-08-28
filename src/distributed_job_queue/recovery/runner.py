@@ -2,11 +2,15 @@
 
 import signal
 import threading
+import logging
 from datetime import datetime, timezone
 
 from distributed_job_queue.common.config import load_settings
+from distributed_job_queue.common.logging import configure_logging
 from distributed_job_queue.persistence.database import SessionFactory
 from distributed_job_queue.recovery.service import RecoveryResult, recover_stale_work
+
+logger = logging.getLogger(__name__)
 
 
 def run_once() -> RecoveryResult:
@@ -26,6 +30,7 @@ def run_once() -> RecoveryResult:
 
 def main() -> None:
     settings = load_settings()
+    configure_logging("recovery", debug=settings.debug)
     stop = threading.Event()
 
     def request_stop(_signum: int, _frame: object) -> None:
@@ -36,6 +41,15 @@ def main() -> None:
 
     while not stop.is_set():
         result = run_once()
+        if result.offline_worker_ids or result.recovered_job_ids:
+            logger.warning(
+                "Recovered stale distributed state",
+                extra={
+                    "event": "recovery.batch_completed",
+                    "offline_worker_ids": result.offline_worker_ids,
+                    "recovered_job_ids": result.recovered_job_ids,
+                },
+            )
         if not result.offline_worker_ids and not result.recovered_job_ids:
             stop.wait(settings.recovery_poll_interval_seconds)
 

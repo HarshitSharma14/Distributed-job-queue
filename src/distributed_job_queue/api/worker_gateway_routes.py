@@ -3,7 +3,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Response, status
+from fastapi import APIRouter, Depends, Path, Response, status
 from sqlalchemy.orm import Session, sessionmaker
 
 from distributed_job_queue.api.dependencies import (
@@ -13,6 +13,7 @@ from distributed_job_queue.api.dependencies import (
     get_session_factory,
     require_worker_token,
 )
+from distributed_job_queue.api.errors import APIError
 from distributed_job_queue.api.schemas import (
     NAME_PATTERN,
     WorkerClaimRequest,
@@ -76,9 +77,10 @@ def heartbeat_worker(
 ) -> WorkerHeartbeatResponse:
     heartbeat = heartbeat_gateway_worker(session, worker_id)
     if heartbeat is None:
-        raise HTTPException(
+        raise APIError(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Worker not found",
+            code="WORKER_NOT_FOUND",
+            message="Worker not found",
         )
     return heartbeat
 
@@ -103,14 +105,16 @@ def claim_job(
             session_factory=session_factory,
         )
     except WorkerUnavailable as exc:
-        raise HTTPException(
+        raise APIError(
             status_code=status.HTTP_409_CONFLICT,
-            detail=str(exc),
+            code="WORKER_UNAVAILABLE",
+            message=str(exc),
         ) from exc
     except WorkerCapabilityMismatch as exc:
-        raise HTTPException(
+        raise APIError(
             status_code=status.HTTP_409_CONFLICT,
-            detail=str(exc),
+            code="WORKER_CAPABILITY_MISMATCH",
+            message=str(exc),
         ) from exc
     if claim is None:
         return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -138,9 +142,10 @@ def renew_job_lease(
             session_factory=session_factory,
         )
     except WorkerLeaseLost as exc:
-        raise HTTPException(
+        raise APIError(
             status_code=status.HTTP_409_CONFLICT,
-            detail=str(exc),
+            code="WORKER_LEASE_LOST",
+            message=str(exc),
         ) from exc
 
 
@@ -165,9 +170,10 @@ def create_result_upload(
             request,
         )
     except WorkerLeaseLost as exc:
-        raise HTTPException(
+        raise APIError(
             status_code=status.HTTP_409_CONFLICT,
-            detail=str(exc),
+            code="WORKER_LEASE_LOST",
+            message=str(exc),
         ) from exc
 
 
@@ -192,14 +198,16 @@ def complete_job(
             session_factory=session_factory,
         )
     except WorkerLeaseLost as exc:
-        raise HTTPException(
+        raise APIError(
             status_code=status.HTTP_409_CONFLICT,
-            detail=str(exc),
+            code="WORKER_LEASE_LOST",
+            message=str(exc),
         ) from exc
     except WorkerResultRejected as exc:
-        raise HTTPException(
+        raise APIError(
             status_code=status.HTTP_409_CONFLICT,
-            detail=str(exc),
+            code="RESULT_REFERENCE_REJECTED",
+            message=str(exc),
         ) from exc
 
 
@@ -224,7 +232,8 @@ def fail_job(
             session_factory=session_factory,
         )
     except WorkerLeaseLost as exc:
-        raise HTTPException(
+        raise APIError(
             status_code=status.HTTP_409_CONFLICT,
-            detail=str(exc),
+            code="WORKER_LEASE_LOST",
+            message=str(exc),
         ) from exc

@@ -1,11 +1,15 @@
 """Publish durable PostgreSQL outbox events to Redis."""
 
+import logging
+
 from sqlalchemy.orm import Session
 
 from distributed_job_queue.domain.job import JobStatus
 from distributed_job_queue.persistence.models import Job, OutboxEvent
 from distributed_job_queue.persistence.repositories import OutboxRepository
 from distributed_job_queue.queueing import RedisQueue
+
+logger = logging.getLogger(__name__)
 
 
 class OutboxPublishError(RuntimeError):
@@ -69,3 +73,12 @@ class OutboxPublisher:
             job.status = JobStatus.QUEUED.value
         repository.mark_published(event)
         session.flush()
+        logger.info(
+            "Published job to Redis",
+            extra={
+                "event": "job.published",
+                "job_id": job.id,
+                "queue": queue_name,
+                "priority": priority,
+            },
+        )

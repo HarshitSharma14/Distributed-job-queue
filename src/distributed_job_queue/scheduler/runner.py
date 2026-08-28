@@ -2,11 +2,15 @@
 
 import signal
 import threading
+import logging
 from datetime import datetime, timezone
 
 from distributed_job_queue.common.config import load_settings
+from distributed_job_queue.common.logging import configure_logging
 from distributed_job_queue.persistence.database import SessionFactory
 from distributed_job_queue.scheduler.service import release_due_retries
+
+logger = logging.getLogger(__name__)
 
 
 def run_once() -> list[str]:
@@ -21,6 +25,7 @@ def run_once() -> list[str]:
 
 def main() -> None:
     settings = load_settings()
+    configure_logging("scheduler", debug=settings.debug)
     stop = threading.Event()
 
     def request_stop(_signum: int, _frame: object) -> None:
@@ -31,6 +36,15 @@ def main() -> None:
 
     while not stop.is_set():
         released = run_once()
+        if released:
+            logger.info(
+                "Released due retries",
+                extra={
+                    "event": "scheduler.retries_released",
+                    "count": len(released),
+                    "job_ids": released,
+                },
+            )
         if not released:
             stop.wait(settings.scheduler_poll_interval_seconds)
 
