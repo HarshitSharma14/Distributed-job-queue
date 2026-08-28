@@ -2,6 +2,13 @@
 
 from .consumer import ClaimedJob, WorkerConsumer
 from .executor import ExecutionOutcome, LeaseLost, LeaseRenewer, WorkerExecutor
+from .gateway_client import (
+    GatewayClaim,
+    GatewayLeaseRejected,
+    GatewayRequestError,
+    WorkerGatewayClient,
+    WorkerLease,
+)
 from .handlers import (
     DuplicateJobHandler,
     HandlerRegistry,
@@ -15,6 +22,9 @@ __all__ = [
     "ClaimedJob",
     "DuplicateJobHandler",
     "ExecutionOutcome",
+    "GatewayClaim",
+    "GatewayLeaseRejected",
+    "GatewayRequestError",
     "HandlerRegistry",
     "InvalidHandlerModule",
     "JobHandler",
@@ -23,5 +33,7 @@ __all__ = [
     "UnknownJobHandler",
     "WorkerConsumer",
     "WorkerExecutor",
+    "WorkerGatewayClient",
+    "WorkerLease",
     "load_handler_modules",
 ]

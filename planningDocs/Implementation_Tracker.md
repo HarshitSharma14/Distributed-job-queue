@@ -4,9 +4,9 @@ This is the working checklist for implementation. We complete and verify each it
 
 ## Current focus
 
-- **Current phase:** Phase 5 — API service
-- **Next step:** Move fenced job completion and failure reporting behind the Worker Gateway
-- **Current milestone:** Worker Gateway owns fenced PostgreSQL and Redis lease renewal; 76 tests pass
+- **Current phase:** Phase 6 — Reliability
+- **Next step:** Implement exponential retry backoff with jitter and schedule `RETRY_WAIT` jobs
+- **Current milestone:** Worker runtime communicates only through the Worker Gateway and has no PostgreSQL or Redis access; 85 tests pass
 
 ## Phase 1 — Project foundation
 
@@ -68,23 +68,23 @@ This is the working checklist for implementation. We complete and verify each it
 - [x] Add the Worker Gateway module and limited worker-token dependency
 - [x] Move job claim and start handoff behind the Worker Gateway
 - [x] Move lease renewal behind the Worker Gateway
-- [ ] Implement job completion and failure endpoints
-- [ ] Remove direct PostgreSQL and Redis access from the worker runtime
-- [ ] Return temporary signed URLs for required handler artifacts
+- [x] Implement job completion and failure endpoints
+- [x] Remove direct PostgreSQL and Redis access from the worker runtime
 - [x] Add request validation and idempotency handling
-- [ ] Add API tests
+- [x] Add API tests
 
 ## Deferred — Worker security design
 
 - [ ] Define worker credential issuance, expiration, rotation, and revocation
 - [ ] Define publisher, producer, worker, and admin authorization scopes
 - [ ] Define handler approval, signing, versioning, and artifact validation
+- [ ] Return temporary signed URLs for required handler artifacts
 - [ ] Define handler isolation and sandboxing requirements
 
 ## Phase 6 — Reliability
 
 - [ ] Implement exponential backoff with jitter
-- [ ] Implement `RETRY_WAIT`
+- [x] Implement the `RETRY_WAIT` state transition
 - [ ] Implement the scheduler
 - [ ] Implement the recovery monitor
 - [ ] Implement dead-letter handling
@@ -94,7 +94,7 @@ This is the working checklist for implementation. We complete and verify each it
 ## Phase 7 — Results and operations
 
 - [ ] Add MinIO result storage
-- [ ] Store result references in PostgreSQL
+- [x] Store result references in PostgreSQL
 - [ ] Add structured logs
 - [ ] Add queue, worker, retry, and failure metrics
 - [ ] Add job and worker status views
@@ -151,3 +151,5 @@ This is the working checklist for implementation. We complete and verify each it
 | 2026-08-28 | Worker Gateway presence API added | Added temporary bearer-token protection, worker registration, heartbeat, validation, persistence integration, environment configuration, and API coverage; all 68 tests pass |
 | 2026-08-28 | Worker Gateway claim API added | Moved Redis long polling, atomic claims, capability validation, PostgreSQL `RUNNING` handoff, attempt creation, and stale/incompatible claim cleanup behind the gateway; all 72 tests pass |
 | 2026-08-28 | Worker Gateway lease renewal added | Added token-fenced renewal across authoritative PostgreSQL state and temporary Redis coordination, with stale-token and missing-lease rejection; all 76 tests pass |
+| 2026-08-28 | Worker Gateway finalization added | Added migration `0004`, durable attempt fencing tokens, idempotent completion/failure replay, result references, retry/terminal failure selection, and best-effort Redis cleanup; all 81 tests pass |
+| 2026-08-28 | Worker runtime isolated from infrastructure | Added the HTTP Gateway client and refactored registration, heartbeat, claim, renewal, completion, and failure so worker code imports neither Redis nor PostgreSQL; all 85 tests pass |

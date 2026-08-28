@@ -187,6 +187,8 @@ Workers need registration, heartbeats, completion, and failure reporting.
 
 Workers communicate exclusively with a Worker Gateway API. The gateway owns PostgreSQL, Redis, and object-storage access and performs long polling, claims, lease changes, and state transitions on the worker's behalf. Workers receive only job-specific payloads, approved handler information, fenced lease tokens, and temporary signed artifact URLs.
 
+Python workers use a synchronous `httpx` client because handler execution is currently synchronous. Heartbeats and lease renewal run in independent threads through the same HTTP abstraction.
+
 The exact token scheme and handler security model will be selected in a separate security design.
 
 ---
@@ -291,6 +293,7 @@ Queue Atomicity:     Redis Lua scripts
 Workers:             Python processes
 Job Delivery:        Gateway HTTP long poll + internal Redis atomic claim
 Control Communication: Worker Gateway REST API
+Worker HTTP Client:   httpx
 Worker Infrastructure Access: None
 Result Storage:      MinIO
 Deployment:          Docker Compose

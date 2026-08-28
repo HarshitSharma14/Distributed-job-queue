@@ -142,6 +142,7 @@ job_attempts
 id                 UUID primary key
 job_id             UUID foreign key
 worker_id          string
+lease_token        UUID nullable, unique
 attempt_number     integer
 started_at         timestamp
 finished_at        timestamp nullable
@@ -560,7 +561,7 @@ Gateway atomically claims job and creates tokenized Redis lease
        └─ Failure: gateway records error and calculates retry or dead-letter
 ```
 
-Only the worker holding the active lease may complete or fail the job. Completion must be idempotent because a lease can expire near the end of execution.
+Only the worker holding the active lease may complete or fail the job. Each attempt retains its unique lease token after the job-level lease is cleared. This makes an identical completion or failure report safely replayable after a lost HTTP response while rejecting changed or stale terminal reports.
 
 ## 3. Failure recovery flow
 

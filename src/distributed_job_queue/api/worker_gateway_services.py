@@ -7,6 +7,9 @@ from sqlalchemy.orm import Session
 from distributed_job_queue.api.schemas import (
     WorkerClaimRequest,
     WorkerClaimResponse,
+    WorkerCompletionRequest,
+    WorkerFailureRequest,
+    WorkerFinalizationResponse,
     WorkerHeartbeatResponse,
     WorkerLeaseRenewRequest,
     WorkerLeaseRenewResponse,
@@ -196,6 +199,102 @@ def renew_gateway_lease(
     )
 
 
+def complete_gateway_job(
+    queue: RedisQueue,
+    job_id: str,
+    request: WorkerCompletionRequest,
+    *,
+    session_factory,
+) -> WorkerFinalizationResponse:
+    """Durably complete one fenced attempt and best-effort clean Redis."""
+
+    lease_token = str(request.lease_token)
+    try:
+        with session_factory.begin() as session:
+            repository = JobRepository(session)
+            existing = repository.get(job_id)
+            if existing is None:
+                raise ConcurrentJobUpdate(f"Worker no longer owns job {job_id}")
+            queue_name = existing.queue
+            replayed = existing.status == JobStatus.COMPLETED.value
+            job = repository.complete_execution(
+                job_id,
+                worker_id=request.worker_id,
+                lease_token=lease_token,
+                now=datetime.now(timezone.utc),
+                result_ref=request.result_ref,
+            )
+            response = WorkerFinalizationResponse(
+                job_id=job.id,
+                status=JobStatus(job.status),
+                attempt_number=job.attempts,
+                result_ref=job.result_ref,
+                error=job.error,
+                replayed=replayed,
+            )
+    except ConcurrentJobUpdate as exc:
+        raise WorkerLeaseLost(f"Worker no longer owns job {job_id}") from exc
+
+    _release_gateway_lease(
+        queue,
+        job_id=job_id,
+        queue_name=queue_name,
+        worker_id=request.worker_id,
+        lease_token=lease_token,
+    )
+    return response
+
+
+def fail_gateway_job(
+    queue: RedisQueue,
+    job_id: str,
+    request: WorkerFailureRequest,
+    *,
+    session_factory,
+) -> WorkerFinalizationResponse:
+    """Durably fail one fenced attempt and select retry or terminal state."""
+
+    lease_token = str(request.lease_token)
+    error = request.error.model_dump(exclude_none=True)
+    try:
+        with session_factory.begin() as session:
+            repository = JobRepository(session)
+            existing = repository.get(job_id)
+            if existing is None:
+                raise ConcurrentJobUpdate(f"Worker no longer owns job {job_id}")
+            queue_name = existing.queue
+            replayed = existing.status in {
+                JobStatus.RETRY_WAIT.value,
+                JobStatus.FAILED.value,
+            }
+            job = repository.fail_execution(
+                job_id,
+                worker_id=request.worker_id,
+                lease_token=lease_token,
+                error=error,
+                now=datetime.now(timezone.utc),
+            )
+            response = WorkerFinalizationResponse(
+                job_id=job.id,
+                status=JobStatus(job.status),
+                attempt_number=job.attempts,
+                result_ref=job.result_ref,
+                error=job.error,
+                replayed=replayed,
+            )
+    except ConcurrentJobUpdate as exc:
+        raise WorkerLeaseLost(f"Worker no longer owns job {job_id}") from exc
+
+    _release_gateway_lease(
+        queue,
+        job_id=job_id,
+        queue_name=queue_name,
+        worker_id=request.worker_id,
+        lease_token=lease_token,
+    )
+    return response
+
+
 def _release_stale_gateway_claim(queue: RedisQueue, lease: JobLease) -> None:
     queue.release_lease(
         lease.job_id,
@@ -203,3 +302,23 @@ def _release_stale_gateway_claim(queue: RedisQueue, lease: JobLease) -> None:
         worker_id=lease.worker_id,
         token=lease.token,
     )
+
+
+def _release_gateway_lease(
+    queue: RedisQueue,
+    *,
+    job_id: str,
+    queue_name: str,
+    worker_id: str,
+    lease_token: str,
+) -> None:
+    try:
+        queue.release_lease(
+            job_id,
+            queue=queue_name,
+            worker_id=worker_id,
+            token=lease_token,
+        )
+    except Exception:
+        # PostgreSQL is authoritative; recovery can remove stale Redis state.
+        return

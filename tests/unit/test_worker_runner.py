@@ -50,7 +50,6 @@ def test_consume_loop_rotates_queues_and_executes_claimed_job():
         queue_names=["reports", "images"],
         consumer=consumer,
         executor=Executor(),
-        lease_seconds=60,
         wait_seconds=0,
     )
 

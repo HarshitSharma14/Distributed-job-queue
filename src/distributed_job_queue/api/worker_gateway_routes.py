@@ -16,6 +16,9 @@ from distributed_job_queue.api.schemas import (
     NAME_PATTERN,
     WorkerClaimRequest,
     WorkerClaimResponse,
+    WorkerCompletionRequest,
+    WorkerFailureRequest,
+    WorkerFinalizationResponse,
     WorkerHeartbeatResponse,
     WorkerLeaseRenewRequest,
     WorkerLeaseRenewResponse,
@@ -27,6 +30,8 @@ from distributed_job_queue.api.worker_gateway_services import (
     WorkerLeaseLost,
     WorkerUnavailable,
     claim_gateway_job,
+    complete_gateway_job,
+    fail_gateway_job,
     heartbeat_gateway_worker,
     register_gateway_worker,
     renew_gateway_lease,
@@ -121,6 +126,60 @@ def renew_job_lease(
 ) -> WorkerLeaseRenewResponse:
     try:
         return renew_gateway_lease(
+            queue,
+            str(job_id),
+            request,
+            session_factory=session_factory,
+        )
+    except WorkerLeaseLost as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/jobs/{job_id}/complete",
+    response_model=WorkerFinalizationResponse,
+    responses={
+        status.HTTP_409_CONFLICT: {"description": "Worker no longer owns the job"}
+    },
+)
+def complete_job(
+    job_id: UUID,
+    request: WorkerCompletionRequest,
+    queue: Annotated[RedisQueue, Depends(get_redis_queue)],
+    session_factory: Annotated[sessionmaker, Depends(get_session_factory)],
+) -> WorkerFinalizationResponse:
+    try:
+        return complete_gateway_job(
+            queue,
+            str(job_id),
+            request,
+            session_factory=session_factory,
+        )
+    except WorkerLeaseLost as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/jobs/{job_id}/fail",
+    response_model=WorkerFinalizationResponse,
+    responses={
+        status.HTTP_409_CONFLICT: {"description": "Worker no longer owns the job"}
+    },
+)
+def fail_job(
+    job_id: UUID,
+    request: WorkerFailureRequest,
+    queue: Annotated[RedisQueue, Depends(get_redis_queue)],
+    session_factory: Annotated[sessionmaker, Depends(get_session_factory)],
+) -> WorkerFinalizationResponse:
+    try:
+        return fail_gateway_job(
             queue,
             str(job_id),
             request,

@@ -8,23 +8,16 @@ import signal
 import threading
 from collections.abc import Callable
 
-from redis import Redis
-
 from distributed_job_queue.common.config import load_settings
-from distributed_job_queue.queueing import RedisQueue
 from distributed_job_queue.workers.consumer import WorkerConsumer
 from distributed_job_queue.workers.executor import LeaseLost, WorkerExecutor
+from distributed_job_queue.workers.gateway_client import WorkerGatewayClient
 from distributed_job_queue.workers.handlers import (
     HandlerRegistry,
     UnknownJobHandler,
     load_handler_modules,
 )
-from distributed_job_queue.workers.runtime import (
-    create_worker_id,
-    heartbeat_worker,
-    mark_worker_offline,
-    register_worker,
-)
+from distributed_job_queue.workers.runtime import create_worker_id
 
 logger = logging.getLogger(__name__)
 
@@ -59,8 +52,8 @@ def heartbeat_loop(
     worker_id: str,
     capabilities: list[str],
     interval_seconds: float,
-    heartbeat: Callable[[str], bool] = heartbeat_worker,
-    register: Callable[[str, list[str]], None] = register_worker,
+    heartbeat: Callable[[str], bool],
+    register: Callable[[str, list[str]], None],
 ) -> None:
     """Maintain worker presence independently of polling and execution."""
 
@@ -79,7 +72,6 @@ def consume_loop(
     queue_names: list[str],
     consumer: WorkerConsumer,
     executor: WorkerExecutor,
-    lease_seconds: int,
     wait_seconds: int,
 ) -> None:
     """Consume subscribed queues until a shutdown signal is received."""
@@ -97,7 +89,6 @@ def consume_loop(
                 claimed = consumer.claim_next(
                     queue_name,
                     worker_id=worker_id,
-                    lease_seconds=lease_seconds,
                     wait_seconds=per_queue_wait,
                 )
                 if claimed is not None:
@@ -153,10 +144,15 @@ def main() -> None:
     signal.signal(signal.SIGINT, request_stop)
     signal.signal(signal.SIGTERM, request_stop)
 
-    redis_client = Redis.from_url(settings.redis_url, decode_responses=True)
-    queue = RedisQueue(redis_client)
-    consumer = WorkerConsumer(queue, registry)
-    executor = WorkerExecutor(queue, lease_seconds=settings.job_lease_seconds)
+    gateway = WorkerGatewayClient(
+        settings.worker_gateway_url,
+        settings.worker_gateway_token,
+    )
+    consumer = WorkerConsumer(gateway, registry)
+    executor = WorkerExecutor(
+        gateway,
+        lease_seconds=settings.job_lease_seconds,
+    )
 
     heartbeat_thread = threading.Thread(
         target=heartbeat_loop,
@@ -165,15 +161,15 @@ def main() -> None:
             "worker_id": worker_id,
             "capabilities": capabilities,
             "interval_seconds": settings.worker_heartbeat_interval_seconds,
+            "heartbeat": gateway.heartbeat,
+            "register": gateway.register,
         },
         name=f"heartbeat-{worker_id}",
         daemon=True,
     )
-    registered = False
     heartbeat_started = False
     try:
-        register_worker(worker_id, capabilities)
-        registered = True
+        gateway.register(worker_id, capabilities)
         heartbeat_thread.start()
         heartbeat_started = True
         consume_loop(
@@ -182,18 +178,13 @@ def main() -> None:
             queue_names=queue_names,
             consumer=consumer,
             executor=executor,
-            lease_seconds=settings.job_lease_seconds,
             wait_seconds=settings.worker_long_poll_seconds,
         )
     finally:
         stop.set()
         if heartbeat_started:
             heartbeat_thread.join()
-        try:
-            if registered:
-                mark_worker_offline(worker_id)
-        finally:
-            redis_client.close()
+        gateway.close()
 
 
 if __name__ == "__main__":

@@ -100,6 +100,9 @@ class Worker(Base):
 
 class JobAttempt(Base):
     __tablename__ = "job_attempts"
+    __table_args__ = (
+        UniqueConstraint("lease_token", name="uq_job_attempts_lease_token"),
+    )
 
     id: Mapped[str] = mapped_column(
         String(36), primary_key=True, default=lambda: str(uuid.uuid4())
@@ -108,6 +111,7 @@ class JobAttempt(Base):
         String(36), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True
     )
     worker_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    lease_token: Mapped[str | None] = mapped_column(String(36), nullable=True)
     attempt_number: Mapped[int] = mapped_column(Integer, nullable=False)
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

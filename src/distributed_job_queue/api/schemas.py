@@ -108,3 +108,30 @@ class WorkerLeaseRenewResponse(BaseModel):
     job_id: str
     worker_id: str
     lease_expires_at: datetime
+
+
+class WorkerCompletionRequest(BaseModel):
+    worker_id: str = Field(min_length=1, max_length=100, pattern=NAME_PATTERN)
+    lease_token: UUID
+    result_ref: str | None = Field(default=None, min_length=1, max_length=2_048)
+
+
+class WorkerFailureDetail(BaseModel):
+    type: str = Field(min_length=1, max_length=200)
+    message: str = Field(min_length=1, max_length=4_000)
+    details: dict[str, Any] | None = None
+
+
+class WorkerFailureRequest(BaseModel):
+    worker_id: str = Field(min_length=1, max_length=100, pattern=NAME_PATTERN)
+    lease_token: UUID
+    error: WorkerFailureDetail
+
+
+class WorkerFinalizationResponse(BaseModel):
+    job_id: str
+    status: JobStatus
+    attempt_number: int
+    result_ref: str | None
+    error: dict[str, Any] | None
+    replayed: bool

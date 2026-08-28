@@ -122,6 +122,7 @@ class JobRepository:
             JobAttempt(
                 job_id=job.id,
                 worker_id=worker_id,
+                lease_token=lease_token,
                 attempt_number=job.attempts,
                 status=JobStatus.RUNNING.value,
             )
@@ -158,15 +159,24 @@ class JobRepository:
         worker_id: str,
         lease_token: str,
         now: datetime,
+        result_ref: str | None = None,
     ) -> Job:
         """Complete a job only while this worker still owns its live lease."""
 
-        job = self._owned_running_job(
-            job_id,
-            worker_id=worker_id,
-            lease_token=lease_token,
-            now=now,
-        )
+        try:
+            job = self._owned_running_job(
+                job_id,
+                worker_id=worker_id,
+                lease_token=lease_token,
+                now=now,
+            )
+        except ConcurrentJobUpdate:
+            return self._replayed_completion(
+                job_id,
+                worker_id=worker_id,
+                lease_token=lease_token,
+                result_ref=result_ref,
+            )
         transition_job(JobStatus.RUNNING, JobStatus.COMPLETED)
         self._finish_current_attempt(
             job,
@@ -175,6 +185,7 @@ class JobRepository:
         )
         job.status = JobStatus.COMPLETED.value
         job.completed_at = now
+        job.result_ref = result_ref
         job.error = None
         self._clear_lease(job)
         self.session.flush()
@@ -191,12 +202,20 @@ class JobRepository:
     ) -> Job:
         """Record a failed attempt while rejecting stale workers."""
 
-        job = self._owned_running_job(
-            job_id,
-            worker_id=worker_id,
-            lease_token=lease_token,
-            now=now,
-        )
+        try:
+            job = self._owned_running_job(
+                job_id,
+                worker_id=worker_id,
+                lease_token=lease_token,
+                now=now,
+            )
+        except ConcurrentJobUpdate:
+            return self._replayed_failure(
+                job_id,
+                worker_id=worker_id,
+                lease_token=lease_token,
+                error=error,
+            )
         self._finish_current_attempt(
             job,
             status=JobStatus.FAILED.value,
@@ -346,6 +365,7 @@ class JobRepository:
             .where(
                 JobAttempt.job_id == job.id,
                 JobAttempt.attempt_number == job.attempts,
+                JobAttempt.lease_token == job.lease_token,
                 JobAttempt.status == JobStatus.RUNNING.value,
             )
             .with_for_update()
@@ -358,6 +378,67 @@ class JobRepository:
         attempt.finished_at = finished_at
         self.session.flush()
         return attempt
+
+    def _replayed_completion(
+        self,
+        job_id: str,
+        *,
+        worker_id: str,
+        lease_token: str,
+        result_ref: str | None,
+    ) -> Job:
+        job, attempt = self._terminal_attempt(
+            job_id,
+            worker_id=worker_id,
+            lease_token=lease_token,
+        )
+        if (
+            job.status != JobStatus.COMPLETED.value
+            or attempt.status != JobStatus.COMPLETED.value
+            or job.result_ref != result_ref
+        ):
+            raise ConcurrentJobUpdate(f"Worker no longer owns job {job_id}")
+        return job
+
+    def _replayed_failure(
+        self,
+        job_id: str,
+        *,
+        worker_id: str,
+        lease_token: str,
+        error: dict[str, Any],
+    ) -> Job:
+        job, attempt = self._terminal_attempt(
+            job_id,
+            worker_id=worker_id,
+            lease_token=lease_token,
+        )
+        if (
+            job.status not in {JobStatus.RETRY_WAIT.value, JobStatus.FAILED.value}
+            or attempt.status != JobStatus.FAILED.value
+            or attempt.error != error
+        ):
+            raise ConcurrentJobUpdate(f"Worker no longer owns job {job_id}")
+        return job
+
+    def _terminal_attempt(
+        self,
+        job_id: str,
+        *,
+        worker_id: str,
+        lease_token: str,
+    ) -> tuple[Job, JobAttempt]:
+        job = self.get(job_id)
+        attempt = self.session.scalar(
+            select(JobAttempt).where(
+                JobAttempt.job_id == job_id,
+                JobAttempt.worker_id == worker_id,
+                JobAttempt.lease_token == lease_token,
+            )
+        )
+        if job is None or attempt is None:
+            raise ConcurrentJobUpdate(f"Worker no longer owns job {job_id}")
+        return job, attempt
 
     def _add_queue_event(self, job: Job) -> OutboxEvent:
         event = OutboxEvent(

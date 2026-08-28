@@ -49,6 +49,7 @@ class Settings:
     minio_access_key: str
     minio_secret_key: str
     minio_bucket: str
+    worker_gateway_url: str
     worker_gateway_token: str
     worker_heartbeat_interval_seconds: int
     worker_offline_after_seconds: int
@@ -86,6 +87,9 @@ def load_settings() -> Settings:
         minio_access_key=os.getenv("MINIO_ACCESS_KEY", "minioadmin"),
         minio_secret_key=os.getenv("MINIO_SECRET_KEY", "minioadmin"),
         minio_bucket=os.getenv("MINIO_BUCKET", "job-results"),
+        worker_gateway_url=os.getenv(
+            "WORKER_GATEWAY_URL", "http://localhost:8000"
+        ),
         worker_gateway_token=worker_gateway_token,
         worker_heartbeat_interval_seconds=_get_int(
             "WORKER_HEARTBEAT_INTERVAL_SECONDS", 10, minimum=1

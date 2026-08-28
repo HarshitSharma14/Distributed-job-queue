@@ -119,12 +119,19 @@ def register_claim_worker(worker_id: str, capability: str) -> httpx.Response:
     )
 
 
-def create_ready_job(session: Session, queue: RedisQueue, queue_name: str) -> Job:
+def create_ready_job(
+    session: Session,
+    queue: RedisQueue,
+    queue_name: str,
+    *,
+    max_attempts: int = 5,
+) -> Job:
     repository = JobRepository(session)
     job = repository.create(
         job_type="generate_report",
         queue=queue_name,
         payload={"report_id": 42},
+        max_attempts=max_attempts,
     )
     repository.transition(job, JobStatus.QUEUED)
     queue.enqueue(job.id, queue=queue_name, priority=job.priority)
@@ -137,9 +144,15 @@ def claim_ready_job(
     queue_name: str,
     *,
     worker_id: str = "worker-1",
+    max_attempts: int = 5,
 ) -> tuple[Job, dict]:
     assert register_claim_worker(worker_id, "generate_report").status_code == 201
-    job = create_ready_job(session, queue, queue_name)
+    job = create_ready_job(
+        session,
+        queue,
+        queue_name,
+        max_attempts=max_attempts,
+    )
     response = gateway_request(
         "POST",
         "/worker/v1/jobs/claim",
@@ -442,3 +455,167 @@ def test_gateway_rejects_malformed_lease_token(claim_gateway_context):
     )
 
     assert response.status_code == 422
+
+
+def test_gateway_completes_job_and_accepts_identical_replay(
+    claim_gateway_context,
+):
+    session, queue, _, queue_name = claim_gateway_context
+    job, claimed = claim_ready_job(session, queue, queue_name)
+    request_body = {
+        "worker_id": "worker-1",
+        "lease_token": claimed["lease_token"],
+        "result_ref": "results/job-output.json",
+    }
+
+    first = gateway_request(
+        "POST",
+        f"/worker/v1/jobs/{job.id}/complete",
+        request_body=request_body,
+    )
+    replay = gateway_request(
+        "POST",
+        f"/worker/v1/jobs/{job.id}/complete",
+        request_body=request_body,
+    )
+
+    assert first.status_code == 200
+    assert first.json() == {
+        "job_id": job.id,
+        "status": JobStatus.COMPLETED.value,
+        "attempt_number": 1,
+        "result_ref": "results/job-output.json",
+        "error": None,
+        "replayed": False,
+    }
+    assert replay.status_code == 200
+    assert replay.json()["replayed"] is True
+    session.expire_all()
+    completed = session.get(Job, job.id)
+    assert completed is not None
+    assert completed.status == JobStatus.COMPLETED.value
+    assert completed.result_ref == "results/job-output.json"
+    attempt = session.scalar(
+        select(JobAttempt).where(JobAttempt.job_id == job.id)
+    )
+    assert attempt is not None
+    assert attempt.status == JobStatus.COMPLETED.value
+    assert attempt.lease_token == claimed["lease_token"]
+    assert queue.inflight_size(queue_name) == 0
+
+
+def test_gateway_rejects_changed_completion_replay(claim_gateway_context):
+    session, queue, _, queue_name = claim_gateway_context
+    job, claimed = claim_ready_job(session, queue, queue_name)
+    original = {
+        "worker_id": "worker-1",
+        "lease_token": claimed["lease_token"],
+        "result_ref": "results/original.json",
+    }
+    assert gateway_request(
+        "POST",
+        f"/worker/v1/jobs/{job.id}/complete",
+        request_body=original,
+    ).status_code == 200
+
+    changed = gateway_request(
+        "POST",
+        f"/worker/v1/jobs/{job.id}/complete",
+        request_body={**original, "result_ref": "results/different.json"},
+    )
+
+    assert changed.status_code == 409
+    assert changed.json() == {
+        "detail": f"Worker no longer owns job {job.id}"
+    }
+
+
+def test_gateway_records_failure_and_accepts_identical_replay(
+    claim_gateway_context,
+):
+    session, queue, _, queue_name = claim_gateway_context
+    job, claimed = claim_ready_job(session, queue, queue_name)
+    request_body = {
+        "worker_id": "worker-1",
+        "lease_token": claimed["lease_token"],
+        "error": {
+            "type": "RuntimeError",
+            "message": "report service unavailable",
+            "details": {"upstream": "reports"},
+        },
+    }
+
+    first = gateway_request(
+        "POST",
+        f"/worker/v1/jobs/{job.id}/fail",
+        request_body=request_body,
+    )
+    replay = gateway_request(
+        "POST",
+        f"/worker/v1/jobs/{job.id}/fail",
+        request_body=request_body,
+    )
+
+    assert first.status_code == 200
+    assert first.json()["status"] == JobStatus.RETRY_WAIT.value
+    assert first.json()["error"] == request_body["error"]
+    assert first.json()["replayed"] is False
+    assert replay.status_code == 200
+    assert replay.json()["replayed"] is True
+    session.expire_all()
+    failed = session.get(Job, job.id)
+    assert failed is not None
+    assert failed.status == JobStatus.RETRY_WAIT.value
+    assert failed.error == request_body["error"]
+    assert queue.inflight_size(queue_name) == 0
+
+
+def test_gateway_marks_exhausted_failure_terminal(claim_gateway_context):
+    session, queue, _, queue_name = claim_gateway_context
+    job, claimed = claim_ready_job(
+        session,
+        queue,
+        queue_name,
+        max_attempts=1,
+    )
+
+    response = gateway_request(
+        "POST",
+        f"/worker/v1/jobs/{job.id}/fail",
+        request_body={
+            "worker_id": "worker-1",
+            "lease_token": claimed["lease_token"],
+            "error": {"type": "ValueError", "message": "invalid report"},
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == JobStatus.FAILED.value
+    session.expire_all()
+    failed = session.get(Job, job.id)
+    assert failed is not None
+    assert failed.status == JobStatus.FAILED.value
+
+
+def test_gateway_completion_remains_durable_when_redis_lease_is_missing(
+    claim_gateway_context,
+):
+    session, queue, redis_client, queue_name = claim_gateway_context
+    job, claimed = claim_ready_job(session, queue, queue_name)
+    redis_client.delete(f"job-lease:{job.id}")
+
+    response = gateway_request(
+        "POST",
+        f"/worker/v1/jobs/{job.id}/complete",
+        request_body={
+            "worker_id": "worker-1",
+            "lease_token": claimed["lease_token"],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == JobStatus.COMPLETED.value
+    session.expire_all()
+    completed = session.get(Job, job.id)
+    assert completed is not None
+    assert completed.status == JobStatus.COMPLETED.value

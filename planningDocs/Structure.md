@@ -40,7 +40,7 @@ Main application package. Production code lives here.
 
 ### `api/`
 
-FastAPI application and process runner. `schemas.py` defines public and worker-gateway contracts, while `dependencies.py` owns request-scoped transactions, internal Redis construction, and the temporary worker-token boundary. `services.py` coordinates producer-facing job operations. `worker_gateway_services.py` owns worker presence, the Redis-to-PostgreSQL claim handoff, and fenced lease renewal. `routes.py` exposes producer-facing HTTP operations; `worker_gateway_routes.py` exposes registration, heartbeat, claim, and lease endpoints and will also own completion and failure reporting. Business rules do not belong in route handlers.
+FastAPI application and process runner. `schemas.py` defines public and worker-gateway contracts, while `dependencies.py` owns request-scoped transactions, internal Redis construction, and the temporary worker-token boundary. `services.py` coordinates producer-facing job operations. `worker_gateway_services.py` owns worker presence, claim handoff, lease renewal, and idempotent terminal reporting. `routes.py` exposes producer-facing HTTP operations; `worker_gateway_routes.py` exposes the complete worker control protocol: registration, heartbeat, claim, renewal, completion, and failure. Business rules do not belong in route handlers.
 
 ### `domain/`
 
@@ -60,7 +60,7 @@ Transactional outbox publishing. Reads locked PostgreSQL outbox events, idempote
 
 ### `workers/`
 
-Worker execution-agent lifecycle. `handlers.py` loads explicit handler modules and maps durable job types to functions, while `runner.py` owns the process loop, error isolation, and graceful shutdown. The current `runtime.py`, `consumer.py`, and infrastructure-aware portions of `executor.py` are transitional: registration, heartbeat, claim, and renewal now have gateway equivalents; completion and failure finalization still need to move behind the Worker Gateway before the final worker can drop PostgreSQL and Redis access.
+Worker execution-agent lifecycle with no infrastructure access. `gateway_client.py` implements the authenticated HTTP control protocol. `consumer.py` claims assignments through that client and attaches locally installed handlers. `executor.py` runs handlers, renews leases in a background thread, and reports terminal outcomes through the gateway. `runtime.py` creates process identities, and `runner.py` combines registration, heartbeats, queue rotation, execution, error isolation, and graceful shutdown. No module in this package imports Redis, SQLAlchemy, repositories, or platform session factories.
 
 ### `scheduler/`
 
@@ -97,13 +97,12 @@ Architecture decisions, research, implementation tracking, and navigation docume
 ## Dependency direction
 
 ```text
-API/Gateway ───────┐
-Workers ──HTTP─────┤
-Scheduler ─────────┼──> Application/domain rules
-Recovery ──────────┘             │
-Publisher ─────────┤             │
-                                 ├──> Persistence interfaces
-                                 └──> Queue interfaces
+Workers ──HTTP──> API/Gateway ───┐
+Scheduler ───────────────────────┼──> Application/domain rules
+Recovery ────────────────────────┤             │
+Publisher ───────────────────────┘             │
+                                              ├──> Persistence interfaces
+                                              └──> Queue interfaces
 
 Persistence ──> PostgreSQL adapter
 Queueing ──────> Redis adapter

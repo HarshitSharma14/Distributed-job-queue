@@ -14,6 +14,7 @@ def test_load_settings_uses_development_defaults():
     assert settings.database_url.startswith("postgresql+")
     assert settings.job_lease_seconds == 60
     assert settings.worker_long_poll_seconds == 20
+    assert settings.worker_gateway_url == "http://localhost:8000"
     assert settings.worker_gateway_token == "dev-worker-token"
     assert settings.max_attempts == 5
     assert settings.outbox_batch_size == 100
@@ -28,6 +29,7 @@ def test_load_settings_parses_environment_values(monkeypatch):
     monkeypatch.setenv("JOB_LEASE_SECONDS", "90")
     monkeypatch.setenv("WORKER_LONG_POLL_SECONDS", "15")
     monkeypatch.setenv("WORKER_GATEWAY_TOKEN", "test-worker-token")
+    monkeypatch.setenv("WORKER_GATEWAY_URL", "https://queue.example.com")
     monkeypatch.setenv("MAX_ATTEMPTS", "3")
 
     settings = load_settings()
@@ -39,6 +41,7 @@ def test_load_settings_parses_environment_values(monkeypatch):
     assert settings.job_lease_seconds == 90
     assert settings.worker_long_poll_seconds == 15
     assert settings.worker_gateway_token == "test-worker-token"
+    assert settings.worker_gateway_url == "https://queue.example.com"
     assert settings.max_attempts == 3
 
 
