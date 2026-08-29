@@ -185,6 +185,20 @@ GET /publisher/analytics?job_type_id=<uuid>&created_after=<timestamp>
 
 These totals come from PostgreSQL and include status counts, attempts, terminal success rate, completion latency, and per-version Job Type breakdowns. Both endpoints always enforce the logged-in Publisher's ownership.
 
+## Producer dashboard data
+
+A Producer can use its browser session or a Producer API key with `jobs:read-own`:
+
+```bash
+curl 'http://localhost:8000/producer/jobs?status=COMPLETED&limit=50' \
+  -H "Authorization: Bearer ${PRODUCER_API_KEY}"
+
+curl 'http://localhost:8000/producer/analytics?publisher_id=<uuid>' \
+  -H "Authorization: Bearer ${PRODUCER_API_KEY}"
+```
+
+Both endpoints are always restricted to jobs submitted by that Producer. Lists can be narrowed by Publisher, Job Type, status, and creation window. Analytics include exact lifecycle totals and identify the Publisher for each Job Type breakdown. Use `GET /jobs/{job_id}` for the complete authorized payload, result, error, and attempt history.
+
 ## Operational metrics
 
 The API exposes a private Prometheus endpoint using a separate token:

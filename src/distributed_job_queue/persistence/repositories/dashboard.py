@@ -1,13 +1,14 @@
-"""Exact PostgreSQL queries for ownership-scoped Publisher dashboards."""
+"""Exact PostgreSQL queries for ownership-scoped product dashboards."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Literal
 
 from sqlalchemy import and_, func, or_, select
-from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from distributed_job_queue.domain.job import JobStatus
 from distributed_job_queue.persistence.models import Job, JobType
@@ -19,37 +20,42 @@ class JobCursor:
     job_id: str
 
 
+DashboardOwner = Literal["publisher", "producer"]
+
+
 @dataclass(frozen=True, slots=True)
-class PublisherJobFilters:
+class DashboardJobFilters:
     status: JobStatus | None = None
     job_type_id: str | None = None
+    publisher_id: str | None = None
     producer_id: str | None = None
     created_after: datetime | None = None
     created_before: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
-class PublisherAnalytics:
+class DashboardAnalytics:
     total_jobs: int
     total_attempts: int
     status_counts: dict[str, int]
     average_completion_latency_ms: float | None
-    job_type_status_counts: list[tuple[str, str, int, str, int]]
+    job_type_status_counts: list[tuple[str, str, str, int, str, int]]
 
 
-class PublisherDashboardRepository:
+class DashboardRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
 
     def list_jobs(
         self,
         *,
-        publisher_id: str,
-        filters: PublisherJobFilters,
+        owner: DashboardOwner,
+        owner_id: str,
+        filters: DashboardJobFilters,
         limit: int,
         cursor: JobCursor | None,
     ) -> list[Job]:
-        conditions = self._conditions(publisher_id, filters)
+        conditions = self._conditions(owner, owner_id, filters)
         if cursor is not None:
             conditions.append(
                 or_(
@@ -71,10 +77,11 @@ class PublisherDashboardRepository:
     def analytics(
         self,
         *,
-        publisher_id: str,
-        filters: PublisherJobFilters,
-    ) -> PublisherAnalytics:
-        conditions = self._conditions(publisher_id, filters)
+        owner: DashboardOwner,
+        owner_id: str,
+        filters: DashboardJobFilters,
+    ) -> DashboardAnalytics:
+        conditions = self._conditions(owner, owner_id, filters)
         status_rows = self.session.execute(
             select(Job.status, func.count()).where(*conditions).group_by(Job.status)
         )
@@ -97,6 +104,7 @@ class PublisherDashboardRepository:
             self.session.execute(
                 select(
                     Job.job_type_id,
+                    Job.publisher_id,
                     Job.type,
                     JobType.version,
                     Job.status,
@@ -106,6 +114,7 @@ class PublisherDashboardRepository:
                 .where(*conditions)
                 .group_by(
                     Job.job_type_id,
+                    Job.publisher_id,
                     Job.type,
                     JobType.version,
                     Job.status,
@@ -113,7 +122,7 @@ class PublisherDashboardRepository:
                 .order_by(Job.type, JobType.version, Job.status)
             )
         )
-        return PublisherAnalytics(
+        return DashboardAnalytics(
             total_jobs=total_jobs,
             total_attempts=total_attempts,
             status_counts=status_counts,
@@ -121,20 +130,29 @@ class PublisherDashboardRepository:
                 float(average_latency) if average_latency is not None else None
             ),
             job_type_status_counts=[
-                (job_type_id, name, version, status, int(count))
-                for job_type_id, name, version, status, count in breakdown
+                (job_type_id, publisher_id, name, version, status, int(count))
+                for job_type_id, publisher_id, name, version, status, count in breakdown
             ],
         )
 
     @staticmethod
     def _conditions(
-        publisher_id: str, filters: PublisherJobFilters
+        owner: DashboardOwner,
+        owner_id: str,
+        filters: DashboardJobFilters,
     ) -> list[ColumnElement[bool]]:
-        conditions: list[ColumnElement[bool]] = [Job.publisher_id == publisher_id]
+        ownership = (
+            Job.publisher_id == owner_id
+            if owner == "publisher"
+            else Job.producer_id == owner_id
+        )
+        conditions: list[ColumnElement[bool]] = [ownership]
         if filters.status is not None:
             conditions.append(Job.status == filters.status.value)
         if filters.job_type_id is not None:
             conditions.append(Job.job_type_id == filters.job_type_id)
+        if filters.publisher_id is not None:
+            conditions.append(Job.publisher_id == filters.publisher_id)
         if filters.producer_id is not None:
             conditions.append(Job.producer_id == filters.producer_id)
         if filters.created_after is not None:

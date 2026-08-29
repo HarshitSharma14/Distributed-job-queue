@@ -5,8 +5,8 @@ This is the working checklist for implementation. We complete and verify each it
 ## Current focus
 
 - **Current phase:** Phase 7.5 — Role-scoped dashboard product
-- **Next step:** Add Producer-scoped job listing and analytics APIs
-- **Current milestone:** Publishers have ownership-scoped, cursor-paginated job summaries and exact PostgreSQL lifecycle analytics with Job Type, Producer, status, and time filters; all 155 tests pass with no Alembic drift
+- **Next step:** Add Worker-scoped assignment and attempt-history APIs
+- **Current milestone:** Producers have ownership-scoped job lists, exact analytics, full existing job detail, and browser-session or `jobs:read-own` API-key access; all 158 tests pass with no Alembic drift
 
 ## Phase 1 — Project foundation
 
@@ -119,7 +119,7 @@ This is the working checklist for implementation. We complete and verify each it
 - [x] Add new immutable Job Type version creation
 - [x] Add publisher-scoped job and analytics APIs
 - [x] Add producer-scoped job detail and attempt-history API
-- [ ] Add producer-scoped job listing and analytics APIs
+- [x] Add producer-scoped job listing and analytics APIs
 - [ ] Add worker-scoped assignment and attempt-history APIs
 - [ ] Add global Admin job, worker, queue, and dead-letter APIs
 - [ ] Combine PostgreSQL analytics with Prometheus trends
@@ -197,3 +197,4 @@ This is the working checklist for implementation. We complete and verify each it
 | 2026-08-29 | Signed Admin handler approval added | Added `PENDING_APPROVAL`, Admin-only approval/rejection with audit fields, Ed25519 release signatures bound to Job Type identity/version/digest, worker trusted-key verification, key-generation CLI, migration `0013`, and fail-closed coverage; all 149 tests pass with no Alembic drift |
 | 2026-08-29 | Immutable Job Type version creation added | Added Publisher-owned next-version creation, inherited or explicit queue selection, clean draft releases, unique predecessor lineage, stale/unreleased source rejection, migration `0014`, and ownership plus concurrency coverage; all 152 tests pass with no Alembic drift |
 | 2026-08-29 | Publisher dashboard data APIs added | Added strict Publisher-session authorization, cursor-paginated job summaries, status/Job Type/Producer/time filters, exact lifecycle and attempt aggregates, per-version breakdowns, terminal success and completion latency, query indexes in migration `0015`, and cross-Publisher isolation coverage; all 155 tests pass with no Alembic drift |
+| 2026-08-29 | Producer dashboard data APIs added | Generalized dashboard queries across ownership types; added Producer job lists, exact analytics, Publisher/Job Type/status/time filters, scoped browser and API-key access, Producer indexes in migration `0016`, and cross-Producer isolation coverage; all 158 tests pass with no Alembic drift |

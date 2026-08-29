@@ -1,4 +1,4 @@
-"""Publisher dashboard API contracts."""
+"""Shared ownership-scoped dashboard API contracts."""
 
 from datetime import datetime
 from typing import Any
@@ -8,9 +8,10 @@ from pydantic import BaseModel
 from distributed_job_queue.domain.job import JobStatus
 
 
-class PublisherJobSummary(BaseModel):
+class DashboardJobSummary(BaseModel):
     job_id: str
     job_type_id: str
+    publisher_id: str
     producer_id: str
     type: str
     queue: str
@@ -27,20 +28,21 @@ class PublisherJobSummary(BaseModel):
     dead_lettered_at: datetime | None
 
 
-class PublisherJobListResponse(BaseModel):
-    items: list[PublisherJobSummary]
+class DashboardJobListResponse(BaseModel):
+    items: list[DashboardJobSummary]
     next_cursor: str | None
 
 
-class PublisherJobTypeAnalytics(BaseModel):
+class DashboardJobTypeAnalytics(BaseModel):
     job_type_id: str
+    publisher_id: str
     name: str
     version: int
     total_jobs: int
     status_counts: dict[str, int]
 
 
-class PublisherAnalyticsResponse(BaseModel):
+class DashboardAnalyticsResponse(BaseModel):
     total_jobs: int
     total_attempts: int
     average_attempts: float | None
@@ -48,4 +50,4 @@ class PublisherAnalyticsResponse(BaseModel):
     terminal_success_rate: float | None
     average_completion_latency_ms: float | None
     status_counts: dict[str, int]
-    job_types: list[PublisherJobTypeAnalytics]
+    job_types: list[DashboardJobTypeAnalytics]

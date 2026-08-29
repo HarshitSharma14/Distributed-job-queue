@@ -138,6 +138,27 @@ def require_publisher_dashboard_principal(
     return principal
 
 
+def require_producer_dashboard_principal(
+    principal: Annotated[AuthenticatedPrincipal, Depends(require_product_principal)],
+) -> AuthenticatedPrincipal:
+    if UserRole.PRODUCER not in principal.roles:
+        raise APIError(
+            status_code=status.HTTP_403_FORBIDDEN,
+            code="PRODUCER_ROLE_REQUIRED",
+            message="Producer role required",
+        )
+    if (
+        principal.credential_kind == CredentialKind.PRODUCER_API_KEY
+        and "jobs:read-own" not in principal.scopes
+    ):
+        raise APIError(
+            status_code=status.HTTP_403_FORBIDDEN,
+            code="INSUFFICIENT_SCOPE",
+            message="Credential cannot read jobs",
+        )
+    return principal
+
+
 def require_publisher_write_principal(
     request: Request,
     principal: Annotated[AuthenticatedPrincipal, Depends(require_publisher_principal)],

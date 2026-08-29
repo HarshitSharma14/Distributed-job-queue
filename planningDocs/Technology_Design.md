@@ -73,6 +73,8 @@ PostgreSQL also enforces immutable Job Type release history with unique `(publis
 
 Publisher dashboard totals are computed directly in PostgreSQL under a mandatory `publisher_id` predicate. Composite Publisher/time and Publisher/status indexes support keyset pagination, filters, and grouped lifecycle counts. Prometheus remains reserved for operational trends and is never queried directly by a browser.
 
+Producer dashboard queries reuse the same service and repository contracts under a mandatory `producer_id` predicate. Matching Producer/time and Producer/status indexes support its list and aggregate paths. Browser sessions and scoped opaque API keys share authorization logic, but raw keys remain hash-only and revocable.
+
 ---
 
 # 3. Queue Technology

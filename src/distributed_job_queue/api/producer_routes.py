@@ -1,4 +1,4 @@
-"""Ownership-scoped Publisher dashboard routes."""
+"""Ownership-scoped Producer dashboard routes."""
 
 from datetime import datetime
 from typing import Annotated
@@ -8,10 +8,8 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from distributed_job_queue.api.auth_dependencies import (
-    require_publisher_dashboard_principal,
+    require_producer_dashboard_principal,
 )
-from distributed_job_queue.api.dependencies import get_session
-from distributed_job_queue.api.errors import APIError
 from distributed_job_queue.api.dashboard_schemas import (
     DashboardAnalyticsResponse,
     DashboardJobListResponse,
@@ -21,22 +19,24 @@ from distributed_job_queue.api.dashboard_services import (
     get_dashboard_analytics,
     list_dashboard_jobs,
 )
+from distributed_job_queue.api.dependencies import get_session
+from distributed_job_queue.api.errors import APIError
 from distributed_job_queue.auth.service import AuthenticatedPrincipal
 from distributed_job_queue.domain.job import JobStatus
 from distributed_job_queue.persistence.repositories.dashboard import DashboardJobFilters
 
-router = APIRouter(prefix="/publisher", tags=["publisher-dashboard"])
+router = APIRouter(prefix="/producer", tags=["producer-dashboard"])
 
 
 @router.get("/jobs", response_model=DashboardJobListResponse)
-def publisher_jobs(
+def producer_jobs(
     principal: Annotated[
-        AuthenticatedPrincipal, Depends(require_publisher_dashboard_principal)
+        AuthenticatedPrincipal, Depends(require_producer_dashboard_principal)
     ],
     session: Annotated[Session, Depends(get_session)],
     status_filter: Annotated[JobStatus | None, Query(alias="status")] = None,
     job_type_id: UUID | None = None,
-    producer_id: UUID | None = None,
+    publisher_id: UUID | None = None,
     created_after: datetime | None = None,
     created_before: datetime | None = None,
     cursor: Annotated[str | None, Query(min_length=1, max_length=512)] = None,
@@ -45,12 +45,12 @@ def publisher_jobs(
     try:
         return list_dashboard_jobs(
             session,
-            owner="publisher",
+            owner="producer",
             owner_id=principal.user_id,
             filters=_filters(
                 status_filter,
                 job_type_id,
-                producer_id,
+                publisher_id,
                 created_after,
                 created_before,
             ),
@@ -62,26 +62,26 @@ def publisher_jobs(
 
 
 @router.get("/analytics", response_model=DashboardAnalyticsResponse)
-def publisher_analytics(
+def producer_analytics(
     principal: Annotated[
-        AuthenticatedPrincipal, Depends(require_publisher_dashboard_principal)
+        AuthenticatedPrincipal, Depends(require_producer_dashboard_principal)
     ],
     session: Annotated[Session, Depends(get_session)],
     status_filter: Annotated[JobStatus | None, Query(alias="status")] = None,
     job_type_id: UUID | None = None,
-    producer_id: UUID | None = None,
+    publisher_id: UUID | None = None,
     created_after: datetime | None = None,
     created_before: datetime | None = None,
 ) -> DashboardAnalyticsResponse:
     try:
         return get_dashboard_analytics(
             session,
-            owner="publisher",
+            owner="producer",
             owner_id=principal.user_id,
             filters=_filters(
                 status_filter,
                 job_type_id,
-                producer_id,
+                publisher_id,
                 created_after,
                 created_before,
             ),
@@ -93,14 +93,14 @@ def publisher_analytics(
 def _filters(
     status_filter: JobStatus | None,
     job_type_id: UUID | None,
-    producer_id: UUID | None,
+    publisher_id: UUID | None,
     created_after: datetime | None,
     created_before: datetime | None,
 ) -> DashboardJobFilters:
     return DashboardJobFilters(
         status=status_filter,
         job_type_id=str(job_type_id) if job_type_id else None,
-        producer_id=str(producer_id) if producer_id else None,
+        publisher_id=str(publisher_id) if publisher_id else None,
         created_after=created_after,
         created_before=created_before,
     )

@@ -1,4 +1,4 @@
-"""Publisher dashboard application services."""
+"""Shared ownership-scoped dashboard application services."""
 
 import base64
 import binascii
@@ -7,18 +7,19 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from distributed_job_queue.api.publisher_schemas import (
-    PublisherAnalyticsResponse,
-    PublisherJobListResponse,
-    PublisherJobSummary,
-    PublisherJobTypeAnalytics,
+from distributed_job_queue.api.dashboard_schemas import (
+    DashboardAnalyticsResponse,
+    DashboardJobListResponse,
+    DashboardJobSummary,
+    DashboardJobTypeAnalytics,
 )
 from distributed_job_queue.domain.job import JobStatus
 from distributed_job_queue.persistence.models import Job
 from distributed_job_queue.persistence.repositories.dashboard import (
+    DashboardJobFilters,
+    DashboardOwner,
+    DashboardRepository,
     JobCursor,
-    PublisherDashboardRepository,
-    PublisherJobFilters,
 )
 
 
@@ -26,18 +27,20 @@ class InvalidDashboardFilter(ValueError):
     """Raised when a dashboard filter or cursor is invalid."""
 
 
-def list_publisher_jobs(
+def list_dashboard_jobs(
     session: Session,
     *,
-    publisher_id: str,
-    filters: PublisherJobFilters,
+    owner: DashboardOwner,
+    owner_id: str,
+    filters: DashboardJobFilters,
     limit: int,
     cursor: str | None,
-) -> PublisherJobListResponse:
+) -> DashboardJobListResponse:
     _validate_filters(filters)
     decoded_cursor = _decode_cursor(cursor) if cursor else None
-    jobs = PublisherDashboardRepository(session).list_jobs(
-        publisher_id=publisher_id,
+    jobs = DashboardRepository(session).list_jobs(
+        owner=owner,
+        owner_id=owner_id,
         filters=filters,
         limit=limit,
         cursor=decoded_cursor,
@@ -45,21 +48,23 @@ def list_publisher_jobs(
     has_more = len(jobs) > limit
     page = jobs[:limit]
     next_cursor = _encode_cursor(page[-1]) if has_more and page else None
-    return PublisherJobListResponse(
+    return DashboardJobListResponse(
         items=[_summary(job) for job in page],
         next_cursor=next_cursor,
     )
 
 
-def get_publisher_analytics(
+def get_dashboard_analytics(
     session: Session,
     *,
-    publisher_id: str,
-    filters: PublisherJobFilters,
-) -> PublisherAnalyticsResponse:
+    owner: DashboardOwner,
+    owner_id: str,
+    filters: DashboardJobFilters,
+) -> DashboardAnalyticsResponse:
     _validate_filters(filters)
-    analytics = PublisherDashboardRepository(session).analytics(
-        publisher_id=publisher_id,
+    analytics = DashboardRepository(session).analytics(
+        owner=owner,
+        owner_id=owner_id,
         filters=filters,
     )
     status_counts = {
@@ -70,13 +75,20 @@ def get_publisher_analytics(
         status_counts[status.value]
         for status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.DEAD_LETTERED)
     )
-    grouped: dict[tuple[str, str, int], dict[str, int]] = {}
-    for job_type_id, name, version, status, count in analytics.job_type_status_counts:
+    grouped: dict[tuple[str, str, str, int], dict[str, int]] = {}
+    for (
+        job_type_id,
+        publisher_id,
+        name,
+        version,
+        status,
+        count,
+    ) in analytics.job_type_status_counts:
         grouped.setdefault(
-            (job_type_id, name, version),
+            (job_type_id, publisher_id, name, version),
             {job_status.value: 0 for job_status in JobStatus},
         )[status] = count
-    return PublisherAnalyticsResponse(
+    return DashboardAnalyticsResponse(
         total_jobs=analytics.total_jobs,
         total_attempts=analytics.total_attempts,
         average_attempts=(
@@ -93,19 +105,20 @@ def get_publisher_analytics(
         average_completion_latency_ms=analytics.average_completion_latency_ms,
         status_counts=status_counts,
         job_types=[
-            PublisherJobTypeAnalytics(
+            DashboardJobTypeAnalytics(
                 job_type_id=job_type_id,
+                publisher_id=publisher_id,
                 name=name,
                 version=version,
                 total_jobs=sum(counts.values()),
                 status_counts=counts,
             )
-            for (job_type_id, name, version), counts in grouped.items()
+            for (job_type_id, publisher_id, name, version), counts in grouped.items()
         ],
     )
 
 
-def _validate_filters(filters: PublisherJobFilters) -> None:
+def _validate_filters(filters: DashboardJobFilters) -> None:
     for value in (filters.created_after, filters.created_before):
         if value is not None and value.tzinfo is None:
             raise InvalidDashboardFilter("Creation timestamps must include a timezone")
@@ -134,19 +147,15 @@ def _decode_cursor(value: str) -> JobCursor:
         if created_at.tzinfo is None or not isinstance(job_id, str) or not job_id:
             raise ValueError
         return JobCursor(created_at=created_at, job_id=job_id)
-    except (
-        ValueError,
-        TypeError,
-        KeyError,
-        binascii.Error,
-    ) as exc:
+    except (ValueError, TypeError, KeyError, binascii.Error) as exc:
         raise InvalidDashboardFilter("Cursor is invalid") from exc
 
 
-def _summary(job: Job) -> PublisherJobSummary:
-    return PublisherJobSummary(
+def _summary(job: Job) -> DashboardJobSummary:
+    return DashboardJobSummary(
         job_id=job.id,
         job_type_id=job.job_type_id,
+        publisher_id=job.publisher_id,
         producer_id=job.producer_id,
         type=job.type,
         queue=job.queue,

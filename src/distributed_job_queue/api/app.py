@@ -7,6 +7,7 @@ from distributed_job_queue.api.errors import install_error_handlers
 from distributed_job_queue.api.middleware import install_request_middleware
 from distributed_job_queue.api.metrics_routes import router as metrics_router
 from distributed_job_queue.api.publisher_routes import router as publisher_router
+from distributed_job_queue.api.producer_routes import router as producer_router
 from distributed_job_queue.api.job_type_routes import router as job_types_router
 from distributed_job_queue.api.routes import router as jobs_router
 from distributed_job_queue.api.worker_gateway_routes import router as worker_gateway_router
@@ -23,6 +24,7 @@ def create_app() -> FastAPI:
     application.include_router(jobs_router)
     application.include_router(job_types_router)
     application.include_router(publisher_router)
+    application.include_router(producer_router)
     application.include_router(worker_management_router)
     application.include_router(worker_gateway_router)
     application.include_router(metrics_router)

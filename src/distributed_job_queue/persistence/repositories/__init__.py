@@ -1,7 +1,7 @@
 """Database repositories."""
 
 from .auth import AuthRepository
-from .dashboard import PublisherDashboardRepository
+from .dashboard import DashboardRepository
 from .identities import IdentityRepository
 from .jobs import ConcurrentJobUpdate, JobRepository
 from .outbox import OutboxRepository
@@ -13,6 +13,6 @@ __all__ = [
     "IdentityRepository",
     "JobRepository",
     "OutboxRepository",
-    "PublisherDashboardRepository",
+    "DashboardRepository",
     "WorkerRepository",
 ]

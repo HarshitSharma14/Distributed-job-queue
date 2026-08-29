@@ -581,7 +581,9 @@ Publisher and Producer totals come from PostgreSQL because they require exact ow
 
 The Publisher dashboard uses `GET /publisher/jobs` for keyset-paginated job summaries and `GET /publisher/analytics` for exact totals. Both queries always begin with the authenticated `publisher_id` and optionally narrow by status, Job Type, Producer, and creation window. Analytics include lifecycle counts, attempts, terminal success rate, completion latency, and per-version Job Type breakdowns. Full payload, result, error, and attempt history remain available through the ownership-checked `GET /jobs/{job_id}` endpoint.
 
-Publisher pagination orders by `(created_at, job_id)` descending and carries that boundary in an opaque cursor. PostgreSQL indexes Publisher/time and Publisher/status access paths. This avoids increasingly expensive offsets and prevents another Publisher's rows from entering either list or aggregate results.
+The Producer dashboard uses the same response model through `GET /producer/jobs` and `GET /producer/analytics`, but every query begins with the authenticated `producer_id`. It can filter by Publisher, Job Type, status, and creation window. A browser session or a Producer API key carrying `jobs:read-own` may read these endpoints; neither can widen the ownership predicate.
+
+Dashboard pagination orders by `(created_at, job_id)` descending and carries that boundary in an opaque cursor. PostgreSQL indexes Publisher/time, Publisher/status, Producer/time, and Producer/status access paths. This avoids increasingly expensive offsets and prevents another user's rows from entering either list or aggregate results.
 
 Worker payload access is temporary and assignment-scoped through the Worker Gateway. The dashboard shows safe job metadata and the worker's own execution record. Retaining payload or result access after execution requires an explicit job-type policy.
 
