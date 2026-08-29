@@ -62,6 +62,8 @@ class WorkerAgentPrincipal:
     job_type_name: str
     queue: str
     job_type_status: str
+    handler_ref: str | None
+    handler_digest: str | None
 
 
 def issue_worker_enrollment(
@@ -218,4 +220,6 @@ def authenticate_worker_agent(
         job_type_name=credential.enrollment.job_type.name,
         queue=credential.enrollment.job_type.queue,
         job_type_status=credential.enrollment.job_type.status,
+        handler_ref=credential.enrollment.job_type.handler_ref,
+        handler_digest=credential.enrollment.job_type.handler_digest,
     )

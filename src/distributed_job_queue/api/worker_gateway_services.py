@@ -101,6 +101,7 @@ def register_gateway_worker(
     )
     return WorkerRegistrationResponse(
         worker_id=worker.id,
+        job_type_id=principal.job_type.id,
         capabilities=worker.capabilities,
         queue=principal.job_type.queue,
         status=WorkerStatus(worker.status),

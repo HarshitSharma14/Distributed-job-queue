@@ -11,6 +11,7 @@ from collections.abc import Callable
 from distributed_job_queue.common.config import load_settings
 from distributed_job_queue.common.logging import configure_logging
 from distributed_job_queue.workers.consumer import WorkerConsumer
+from distributed_job_queue.workers.bundles import InstalledHandlerBundle, install_downloaded_handler
 from distributed_job_queue.workers.executor import LeaseLost, WorkerExecutor
 from distributed_job_queue.workers.gateway_client import WorkerGatewayClient
 from distributed_job_queue.workers.handlers import (
@@ -29,8 +30,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--handler-module",
         action="append",
-        required=True,
+        default=[],
         help="Module exposing register_handlers(registry); may be repeated",
+    )
+    parser.add_argument(
+        "--allow-downloaded-handler",
+        action="store_true",
+        help="Explicitly trust and execute the Publisher-provided handler bundle",
     )
     return parser.parse_args()
 
@@ -143,9 +149,6 @@ def main() -> None:
     registry = HandlerRegistry()
     load_handler_modules(registry, args.handler_module)
     worker_id = create_worker_id(args.name)
-    local_capabilities = list(registry.job_types())
-    if not local_capabilities:
-        raise SystemExit("No handlers or worker capabilities were registered")
     if not settings.worker_enrollment_token:
         raise SystemExit("WORKER_ENROLLMENT_TOKEN is required to register a worker")
 
@@ -179,13 +182,28 @@ def main() -> None:
         daemon=True,
     )
     heartbeat_started = False
+    installed_bundle: InstalledHandlerBundle | None = None
     try:
         registration = gateway.register(worker_id)
-        unsupported = set(registration.capabilities) - set(local_capabilities)
+        unsupported = set(registration.capabilities) - set(registry.job_types())
+        if unsupported and args.allow_downloaded_handler:
+            downloaded = gateway.download_handler(max_bytes=settings.handler_max_bytes)
+            if (
+                downloaded.job_type_id != registration.job_type_id
+                or downloaded.job_type not in unsupported
+            ):
+                raise SystemExit("Gateway returned an unexpected handler assignment")
+            installed_bundle = install_downloaded_handler(
+                registry,
+                downloaded,
+                max_uncompressed_bytes=settings.handler_max_uncompressed_bytes,
+            )
+            unsupported = set(registration.capabilities) - set(registry.job_types())
         if unsupported:
             raise SystemExit(
                 "Worker bundle does not provide assigned handler(s): "
                 + ", ".join(sorted(unsupported))
+                + ". Use --allow-downloaded-handler only after trusting the Publisher."
             )
         queue_names = [registration.queue]
         heartbeat_thread.start()
@@ -202,6 +220,8 @@ def main() -> None:
         stop.set()
         if heartbeat_started:
             heartbeat_thread.join()
+        if installed_bundle is not None:
+            installed_bundle.close()
         gateway.close()
 
 

@@ -22,6 +22,7 @@ def test_load_settings_uses_development_defaults():
     assert settings.result_upload_url_seconds == 300
     assert settings.minio_handler_bucket == "handler-artifacts"
     assert settings.handler_upload_url_seconds == 300
+    assert settings.handler_download_url_seconds == 300
     assert settings.handler_max_bytes == 10 * 1024 * 1024
     assert settings.handler_max_uncompressed_bytes == 50 * 1024 * 1024
     assert settings.metrics_token == "dev-metrics-token"
@@ -52,6 +53,7 @@ def test_load_settings_parses_environment_values(monkeypatch):
     monkeypatch.setenv("RESULT_UPLOAD_URL_SECONDS", "120")
     monkeypatch.setenv("MINIO_HANDLER_BUCKET", "test-handlers")
     monkeypatch.setenv("HANDLER_UPLOAD_URL_SECONDS", "180")
+    monkeypatch.setenv("HANDLER_DOWNLOAD_URL_SECONDS", "90")
     monkeypatch.setenv("HANDLER_MAX_BYTES", "2048")
     monkeypatch.setenv("HANDLER_MAX_UNCOMPRESSED_BYTES", "8192")
     monkeypatch.setenv("MAX_ATTEMPTS", "3")
@@ -78,6 +80,7 @@ def test_load_settings_parses_environment_values(monkeypatch):
     assert settings.result_upload_url_seconds == 120
     assert settings.minio_handler_bucket == "test-handlers"
     assert settings.handler_upload_url_seconds == 180
+    assert settings.handler_download_url_seconds == 90
     assert settings.handler_max_bytes == 2048
     assert settings.handler_max_uncompressed_bytes == 8192
     assert settings.max_attempts == 3

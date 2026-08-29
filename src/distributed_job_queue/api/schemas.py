@@ -75,6 +75,7 @@ class WorkerRegistrationRequest(BaseModel):
 
 class WorkerRegistrationResponse(BaseModel):
     worker_id: str
+    job_type_id: str
     capabilities: list[str]
     queue: str
     status: WorkerStatus
@@ -89,6 +90,14 @@ class WorkerHeartbeatResponse(BaseModel):
     worker_id: str
     status: WorkerStatus
     last_heartbeat_at: datetime
+
+
+class WorkerHandlerDownloadResponse(BaseModel):
+    job_type_id: str
+    job_type: str
+    sha256: str
+    download_url: str
+    expires_at: datetime
 
 
 class WorkerClaimRequest(BaseModel):

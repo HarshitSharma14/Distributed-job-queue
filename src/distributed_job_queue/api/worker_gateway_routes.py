@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from distributed_job_queue.api.dependencies import (
     get_session,
+    get_handler_storage,
     get_redis_queue,
     get_result_storage,
     get_session_factory,
@@ -23,6 +24,7 @@ from distributed_job_queue.api.schemas import (
     WorkerFailureRequest,
     WorkerFinalizationResponse,
     WorkerHeartbeatResponse,
+    WorkerHandlerDownloadResponse,
     WorkerLeaseRenewRequest,
     WorkerLeaseRenewResponse,
     WorkerRegistrationRequest,
@@ -44,7 +46,8 @@ from distributed_job_queue.api.worker_gateway_services import (
     renew_gateway_lease,
 )
 from distributed_job_queue.queueing import RedisQueue
-from distributed_job_queue.storage import MinioResultStorage
+from distributed_job_queue.storage import MinioHandlerStorage, MinioResultStorage
+from distributed_job_queue.common.config import load_settings
 from distributed_job_queue.common.metrics import LEASE_LOSSES
 from distributed_job_queue.auth.worker_credentials import (
     WorkerAgentPrincipal,
@@ -57,6 +60,36 @@ router = APIRouter(
     prefix="/worker/v1",
     tags=["worker-gateway"],
 )
+
+
+@router.get("/handler", response_model=WorkerHandlerDownloadResponse)
+def download_assigned_handler(
+    principal: Annotated[WorkerAgentPrincipal, Depends(require_worker_agent)],
+    storage: Annotated[MinioHandlerStorage, Depends(get_handler_storage)],
+) -> WorkerHandlerDownloadResponse:
+    if principal.job_type_status != JobTypeStatus.ACTIVE.value:
+        raise APIError(
+            status_code=status.HTTP_409_CONFLICT,
+            code="JOB_TYPE_NOT_ACTIVE",
+            message="Assigned Job Type is not active",
+        )
+    if not principal.handler_ref or not principal.handler_digest:
+        raise APIError(
+            status_code=status.HTTP_409_CONFLICT,
+            code="HANDLER_NOT_AVAILABLE",
+            message="Assigned Job Type does not have a verified handler",
+        )
+    download = storage.create_download(
+        object_ref=principal.handler_ref,
+        expires_in_seconds=load_settings().handler_download_url_seconds,
+    )
+    return WorkerHandlerDownloadResponse(
+        job_type_id=principal.job_type_id,
+        job_type=principal.job_type_name,
+        sha256=principal.handler_digest,
+        download_url=download.download_url,
+        expires_at=download.expires_at,
+    )
 
 
 @router.post(

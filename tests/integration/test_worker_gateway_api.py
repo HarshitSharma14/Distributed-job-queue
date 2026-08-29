@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from distributed_job_queue.api.app import app
 from distributed_job_queue.api.dependencies import (
     get_redis_queue,
+    get_handler_storage,
     get_result_storage,
     get_session,
     get_session_factory,
@@ -36,7 +37,7 @@ from distributed_job_queue.persistence.repositories import (
 from distributed_job_queue.auth.security import token_hash
 from distributed_job_queue.auth.worker_credentials import issue_worker_enrollment
 from distributed_job_queue.queueing import RedisQueue
-from distributed_job_queue.storage import ResultUpload
+from distributed_job_queue.storage import HandlerDownload, ResultUpload
 
 _DEFAULT_TOKEN = object()
 _active_worker_token: str | None = None
@@ -60,6 +61,19 @@ class RecordingResultStorage:
             result_ref=f"jobs/{job_id}/attempts/{attempt_number}/result.json",
             upload_url="https://storage.example.com/signed-result",
             expires_at=datetime.fromisoformat("2026-08-28T10:05:00+00:00"),
+        )
+
+
+class RecordingHandlerStorage:
+    def __init__(self) -> None:
+        self.calls = []
+
+    def create_download(self, *, object_ref, expires_in_seconds):
+        self.calls.append((object_ref, expires_in_seconds))
+        return HandlerDownload(
+            object_ref=object_ref,
+            download_url="https://storage.example.com/signed-handler",
+            expires_at=datetime.fromisoformat("2026-08-29T10:05:00+00:00"),
         )
 
 
@@ -403,6 +417,25 @@ def test_agent_token_cannot_impersonate_another_worker(gateway_context):
         code="WORKER_IDENTITY_MISMATCH",
         message="Worker Agent token is not valid for this worker ID",
     )
+
+
+def test_agent_receives_only_its_assigned_handler_download(gateway_context):
+    session = gateway_context
+    storage = RecordingHandlerStorage()
+    app.dependency_overrides[get_handler_storage] = lambda: storage
+    assert register_claim_worker(
+        session, "reports", "worker-1", "generate_report"
+    ).status_code == 201
+
+    response = gateway_request("GET", "/worker/v1/handler")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["job_type_id"] == _active_job_type_id
+    assert body["job_type"] == "generate_report"
+    assert body["sha256"] == "a" * 64
+    assert body["download_url"] == "https://storage.example.com/signed-handler"
+    assert storage.calls == [("handlers/generate_report.zip", 300)]
 
 
 def test_gateway_claims_job_and_persists_running_handoff(claim_gateway_context):

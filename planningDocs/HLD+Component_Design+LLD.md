@@ -630,6 +630,8 @@ Heartbeat / claim / renew / finish use agent token
 
 The agent token is checked against the requested Worker ID, exact `job_type_id`, and assigned queue. It cannot impersonate another agent or claim a same-named Job Type from another Publisher. Re-enrollment revokes the previous active credential, and dashboard revocation takes effect immediately.
 
+After registration, the agent may request a short-lived signed download URL for only that Job Type's verified immutable handler. It downloads without storage credentials, checks compressed and uncompressed limits, verifies SHA-256, revalidates archive paths and the manifest, and installs into a temporary directory. Downloaded Python code executes only with explicit operator consent. Structural verification does not replace runtime isolation.
+
 ---
 
 # 14. How are Job Types managed?
@@ -667,13 +669,33 @@ Only `ACTIVE` Job Types accept new jobs. A Publisher reserves an attempt-scoped 
 
 Verified bytes are copied to a content-addressed object key that was never exposed through an upload URL. The Job Type references only this promoted key, so reusing an unexpired upload URL cannot replace active handler code. Successful verification performs the controlled `DRAFT → ACTIVE` transition; rejected artifacts remain auditable and the Job Type stays `DRAFT`.
 
-These checks prove integrity and package structure, not that Publisher code is harmless. Signature policy, platform approval, runtime sandboxing, and safe Worker distribution remain separate controls before arbitrary external workers execute downloaded handlers.
+These checks prove integrity and package structure, not that Publisher code is harmless. Worker delivery now repeats integrity and structure checks and requires explicit execution consent. Signature policy, platform approval, and runtime sandboxing remain separate controls.
 
 ---
 
 # Runtime Flows
 
 These flows describe the normal and failure paths the implementation must support.
+
+## 0. Worker enrollment and handler delivery flow
+
+```text
+Worker user creates one-time enrollment
+  ↓
+Agent registers through Worker Gateway
+  ↓
+Gateway returns per-agent credential
+  ↓
+Agent requests its assigned handler
+  ↓
+Gateway returns temporary signed GET URL
+  ↓
+Agent downloads directly from private storage
+  ↓
+Verify size + SHA-256 + ZIP + manifest
+  ↓
+Install temporarily and execute only with explicit consent
+```
 
 ## 1. Job submission flow
 
@@ -829,6 +851,7 @@ Outbox Publisher
 Worker Processes
   ├─ communicate only with the Worker Gateway
   ├─ register and heartbeat
+  ├─ securely download and revalidate the assigned handler
   ├─ execute approved handlers
   └─ report lease renewal, completion, or failure
 

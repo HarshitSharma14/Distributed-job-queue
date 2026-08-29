@@ -191,6 +191,8 @@ Python workers use a synchronous `httpx` client because handler execution is cur
 
 Registration accepts a short-lived, one-time opaque enrollment token created by an authenticated Worker user. The gateway exchanges it for an expiring, revocable opaque credential bound to one Worker Agent and stores only its SHA-256 hash. Every later operation verifies the bound Worker ID, exact Job Type ID, and assigned queue. Re-enrollment rotates the credential; dashboard revocation takes effect immediately.
 
+The agent credential can request a short-lived signed GET URL only for its assigned immutable handler. The Worker downloads directly from private object storage without permanent credentials, enforces transfer and extraction limits, verifies SHA-256, and rechecks the ZIP manifest before temporary installation. Executing downloaded Publisher code requires an explicit Worker runtime flag; process/container sandboxing remains a separate required security decision.
+
 ---
 
 # 7. Result Storage

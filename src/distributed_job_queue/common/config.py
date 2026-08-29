@@ -54,6 +54,7 @@ class Settings:
     result_upload_url_seconds: int
     minio_handler_bucket: str
     handler_upload_url_seconds: int
+    handler_download_url_seconds: int
     handler_max_bytes: int
     handler_max_uncompressed_bytes: int
     metrics_token: str
@@ -112,6 +113,9 @@ def load_settings() -> Settings:
         ),
         handler_upload_url_seconds=_get_int(
             "HANDLER_UPLOAD_URL_SECONDS", 300, minimum=1
+        ),
+        handler_download_url_seconds=_get_int(
+            "HANDLER_DOWNLOAD_URL_SECONDS", 300, minimum=1
         ),
         handler_max_bytes=_get_int(
             "HANDLER_MAX_BYTES", 10 * 1024 * 1024, minimum=1

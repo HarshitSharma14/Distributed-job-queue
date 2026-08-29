@@ -1,4 +1,5 @@
 import json
+import hashlib
 
 import httpx
 import pytest
@@ -7,6 +8,7 @@ from distributed_job_queue.domain.job import JobStatus
 from distributed_job_queue.workers.gateway_client import (
     GatewayLeaseRejected,
     GatewayRequestError,
+    HandlerDownloadRejected,
     WorkerGatewayClient,
     WorkerLease,
 )
@@ -30,6 +32,7 @@ def test_client_registers_and_heartbeats_with_bearer_token():
                 201,
                 json={
                     "worker_id": "worker-1",
+                    "job_type_id": "job-type-1",
                     "capabilities": ["generate_report"],
                     "queue": "reports",
                     "worker_token": "agent-secret",
@@ -47,10 +50,69 @@ def test_client_registers_and_heartbeats_with_bearer_token():
 
     assert len(requests) == 2
     assert registration.capabilities == ("generate_report",)
+    assert registration.job_type_id == "job-type-1"
     assert registration.queue == "reports"
     assert requests[0].headers["authorization"] == "Bearer worker-secret"
     assert requests[1].headers["authorization"] == "Bearer agent-secret"
     assert json.loads(requests[0].content) == {"worker_id": "worker-1"}
+
+
+def test_client_downloads_and_verifies_assigned_handler_without_storage_credentials():
+    content = b"verified handler bundle"
+    digest = hashlib.sha256(content).hexdigest()
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        if request.url.path == "/worker/v1/handler":
+            return httpx.Response(
+                200,
+                json={
+                    "job_type_id": "job-type-1",
+                    "job_type": "generate_report",
+                    "sha256": digest,
+                    "download_url": "https://storage.example.com/handler.zip",
+                    "expires_at": "2026-08-29T12:00:00+00:00",
+                },
+            )
+        if request.url.host == "storage.example.com":
+            return httpx.Response(200, content=content)
+        raise AssertionError(f"Unexpected request: {request.url}")
+
+    client = make_client(handler)
+    try:
+        downloaded = client.download_handler(max_bytes=1_000)
+    finally:
+        client.close()
+
+    assert downloaded.job_type_id == "job-type-1"
+    assert downloaded.job_type == "generate_report"
+    assert downloaded.content == content
+    assert requests[0].headers["authorization"] == "Bearer worker-secret"
+    assert "authorization" not in requests[1].headers
+
+
+def test_client_rejects_handler_when_download_digest_changes():
+    def handler(request):
+        if request.url.path == "/worker/v1/handler":
+            return httpx.Response(
+                200,
+                json={
+                    "job_type_id": "job-type-1",
+                    "job_type": "generate_report",
+                    "sha256": "0" * 64,
+                    "download_url": "https://storage.example.com/handler.zip",
+                    "expires_at": "2026-08-29T12:00:00+00:00",
+                },
+            )
+        return httpx.Response(200, content=b"altered")
+
+    client = make_client(handler)
+    try:
+        with pytest.raises(HandlerDownloadRejected, match="digest verification"):
+            client.download_handler(max_bytes=1_000)
+    finally:
+        client.close()
 
 
 def test_client_claims_and_parses_gateway_assignment():

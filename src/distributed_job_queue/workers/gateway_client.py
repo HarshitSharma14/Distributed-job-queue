@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import hashlib
+from hmac import compare_digest
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -41,9 +43,22 @@ class GatewayClaim:
 @dataclass(frozen=True, slots=True)
 class GatewayRegistration:
     worker_id: str
+    job_type_id: str
     capabilities: tuple[str, ...]
     queue: str
     token_expires_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class DownloadedHandlerBundle:
+    job_type_id: str
+    job_type: str
+    digest: str
+    content: bytes
+
+
+class HandlerDownloadRejected(GatewayRequestError):
+    """Raised when a handler download is oversized, altered, or malformed."""
 
 
 class WorkerGatewayClient:
@@ -90,6 +105,7 @@ class WorkerGatewayClient:
         self._client.headers["Authorization"] = f"Bearer {worker_token}"
         return GatewayRegistration(
             worker_id=str(body["worker_id"]),
+            job_type_id=str(body["job_type_id"]),
             capabilities=tuple(body["capabilities"]),
             queue=str(body["queue"]),
             token_expires_at=datetime.fromisoformat(body["token_expires_at"]),
@@ -103,6 +119,49 @@ class WorkerGatewayClient:
             return False
         self._raise_for_gateway_error(response)
         return True
+
+    def download_handler(self, *, max_bytes: int) -> DownloadedHandlerBundle:
+        """Fetch the assigned bundle without exposing object-storage credentials."""
+
+        if max_bytes < 1:
+            raise ValueError("max_bytes must be at least 1")
+        assignment = self._client.get("/worker/v1/handler")
+        self._raise_for_gateway_error(assignment)
+        body = assignment.json()
+        with self._upload_client.stream("GET", body["download_url"]) as response:
+            if not response.is_success:
+                raise HandlerDownloadRejected(
+                    f"Handler download returned {response.status_code}"
+                )
+            declared_size = response.headers.get("Content-Length")
+            if declared_size is not None:
+                try:
+                    parsed_size = int(declared_size)
+                except ValueError as exc:
+                    raise HandlerDownloadRejected(
+                        "Handler download returned an invalid size"
+                    ) from exc
+                if parsed_size > max_bytes:
+                    raise HandlerDownloadRejected(
+                        "Handler bundle exceeds the size limit"
+                    )
+            content = bytearray()
+            for chunk in response.iter_bytes():
+                content.extend(chunk)
+                if len(content) > max_bytes:
+                    raise HandlerDownloadRejected(
+                        "Handler bundle exceeds the size limit"
+                    )
+        expected_digest = str(body["sha256"]).lower()
+        actual_digest = hashlib.sha256(content).hexdigest()
+        if not compare_digest(actual_digest, expected_digest):
+            raise HandlerDownloadRejected("Handler bundle digest verification failed")
+        return DownloadedHandlerBundle(
+            job_type_id=str(body["job_type_id"]),
+            job_type=str(body["job_type"]),
+            digest=actual_digest,
+            content=bytes(content),
+        )
 
     def claim(
         self,

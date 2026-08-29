@@ -23,6 +23,13 @@ class HandlerUpload:
 
 
 @dataclass(frozen=True, slots=True)
+class HandlerDownload:
+    object_ref: str
+    download_url: str
+    expires_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
 class HandlerInspection:
     size_bytes: int
     digest: str | None
@@ -63,6 +70,22 @@ class MinioHandlerStorage:
         return HandlerUpload(
             object_ref=object_ref,
             upload_url=self.client.presigned_put_object(
+                self.bucket, object_ref, expires=expires
+            ),
+            expires_at=datetime.now(timezone.utc) + expires,
+        )
+
+    def create_download(
+        self, *, object_ref: str, expires_in_seconds: int
+    ) -> HandlerDownload:
+        if not object_ref:
+            raise ValueError("object_ref must not be empty")
+        if expires_in_seconds < 1:
+            raise ValueError("expires_in_seconds must be at least 1")
+        expires = timedelta(seconds=expires_in_seconds)
+        return HandlerDownload(
+            object_ref=object_ref,
+            download_url=self.client.presigned_get_object(
                 self.bucket, object_ref, expires=expires
             ),
             expires_at=datetime.now(timezone.utc) + expires,
