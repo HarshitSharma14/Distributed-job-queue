@@ -14,6 +14,7 @@ def main() -> None:
         secrets=(
             settings.minio_access_key,
             settings.minio_secret_key,
+            settings.handler_signing_private_key or "",
         ),
     )
     uvicorn.run(

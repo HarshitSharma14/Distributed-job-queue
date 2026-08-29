@@ -53,7 +53,10 @@ class GatewayRegistration:
 class DownloadedHandlerBundle:
     job_type_id: str
     job_type: str
+    version: int
     digest: str
+    signing_key_id: str
+    release_signature: str
     content: bytes
 
 
@@ -159,7 +162,10 @@ class WorkerGatewayClient:
         return DownloadedHandlerBundle(
             job_type_id=str(body["job_type_id"]),
             job_type=str(body["job_type"]),
+            version=int(body["version"]),
             digest=actual_digest,
+            signing_key_id=str(body["signing_key_id"]),
+            release_signature=str(body["release_signature"]),
             content=bytes(content),
         )
 

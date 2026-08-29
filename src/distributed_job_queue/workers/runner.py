@@ -15,6 +15,7 @@ from distributed_job_queue.workers.bundles import InstalledHandlerBundle, instal
 from distributed_job_queue.workers.executor import LeaseLost, WorkerExecutor
 from distributed_job_queue.workers.gateway_client import WorkerGatewayClient
 from distributed_job_queue.workers.sandbox import DockerHandlerSandbox
+from distributed_job_queue.auth.handler_signing import parse_trusted_public_keys
 from distributed_job_queue.workers.handlers import (
     HandlerRegistry,
     UnknownJobHandler,
@@ -207,6 +208,9 @@ def main() -> None:
                 downloaded,
                 max_uncompressed_bytes=settings.handler_max_uncompressed_bytes,
                 sandbox=sandbox,
+                trusted_public_keys=parse_trusted_public_keys(
+                    settings.handler_trusted_public_keys
+                ),
             )
             unsupported = set(registration.capabilities) - set(registry.job_types())
         if unsupported:

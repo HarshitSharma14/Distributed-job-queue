@@ -39,6 +39,8 @@ def worker_management_context():
         queue="reports",
         handler_ref="verified/generate-report.zip",
         handler_digest="a" * 64,
+        handler_signing_key_id="test-key",
+        handler_release_signature="test-signature",
     )
 
     def override_session():

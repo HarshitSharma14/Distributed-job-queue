@@ -169,6 +169,10 @@ class JobType(Base):
     )
     handler_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
     handler_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    handler_signing_key_id: Mapped[str | None] = mapped_column(
+        String(100), nullable=True
+    )
+    handler_release_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -222,8 +226,24 @@ class HandlerArtifact(Base):
     verified_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    approved_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=True, index=True
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    rejected_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=True, index=True
+    )
+    rejected_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    signing_key_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    release_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     job_type: Mapped[JobType] = relationship(back_populates="handler_artifacts")
+    approved_by: Mapped[User | None] = relationship(foreign_keys=[approved_by_user_id])
+    rejected_by: Mapped[User | None] = relationship(foreign_keys=[rejected_by_user_id])
 
 
 class Job(Base):

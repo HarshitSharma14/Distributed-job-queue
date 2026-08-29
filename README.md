@@ -55,6 +55,18 @@ Password: minioadmin
 
 The `job-results` and `handler-artifacts` buckets should exist and remain private.
 
+### Configure handler release signing
+
+Generate an Ed25519 key pair once for the platform:
+
+```bash
+djq-generate-handler-key --key-id local-dev
+```
+
+Store `HANDLER_SIGNING_PRIVATE_KEY` only with the API/Admin deployment. Configure workers with `HANDLER_TRUSTED_PUBLIC_KEYS`, which maps the key ID to its public key. Never copy the private key to a worker.
+
+A Publisher upload is verified and promoted as immutable, then remains `PENDING_APPROVAL`. An Admin must approve and sign that exact Job Type ID, name, version, and digest before it becomes `ACTIVE`. Workers verify this release signature before installing the bundle.
+
 ### Stop services
 
 ```bash
@@ -94,7 +106,7 @@ job-worker \
   --allow-downloaded-handler
 ```
 
-An authenticated Worker user creates the short-lived enrollment token for one active Job Type. Registration consumes it once and returns a revocable credential bound to that Worker Agent. The platform—not the worker—selects the Job Type capability and queue. The worker exits if its local bundle does not contain the assigned handler.
+An authenticated Worker user creates the short-lived enrollment token for one active, Admin-approved Job Type. Registration consumes it once and returns a revocable credential bound to that Worker Agent. The platform—not the worker—selects the Job Type capability and queue. The worker exits if its local bundle does not contain the assigned handler or its platform release signature is invalid.
 
 For trusted internal code, provide `--handler-module` and omit `--allow-downloaded-handler`. For a generic external agent, the opt-in flag executes the assigned bundle only through an ephemeral restricted Docker container. The agent itself never imports Publisher code. Docker must be running on the Worker machine.
 

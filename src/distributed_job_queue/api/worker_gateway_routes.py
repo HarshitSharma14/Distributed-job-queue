@@ -73,7 +73,12 @@ def download_assigned_handler(
             code="JOB_TYPE_NOT_ACTIVE",
             message="Assigned Job Type is not active",
         )
-    if not principal.handler_ref or not principal.handler_digest:
+    if (
+        not principal.handler_ref
+        or not principal.handler_digest
+        or not principal.handler_signing_key_id
+        or not principal.handler_release_signature
+    ):
         raise APIError(
             status_code=status.HTTP_409_CONFLICT,
             code="HANDLER_NOT_AVAILABLE",
@@ -86,7 +91,10 @@ def download_assigned_handler(
     return WorkerHandlerDownloadResponse(
         job_type_id=principal.job_type_id,
         job_type=principal.job_type_name,
+        version=principal.job_type_version,
         sha256=principal.handler_digest,
+        signing_key_id=principal.handler_signing_key_id,
+        release_signature=principal.handler_release_signature,
         download_url=download.download_url,
         expires_at=download.expires_at,
     )

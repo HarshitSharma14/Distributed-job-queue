@@ -42,11 +42,11 @@ Main application package. Production code lives here.
 
 ### `api/`
 
-FastAPI application and process runner. Authentication routes expose human sessions and Producer API keys. Job Type routes own Publisher definitions and verified handler activation. Worker management routes issue one-time enrollments and list or revoke owned agents. `dependencies.py` authenticates registrations and per-agent requests without holding a database connection during long polling. Worker Gateway routes expose registration, heartbeat, claim, renewal, result upload, completion, and failure. Services own state changes; routes own HTTP validation and authorization boundaries.
+FastAPI application and process runner. Authentication routes expose human sessions and Producer API keys. Job Type routes own Publisher definitions, bundle verification, and Admin-only signed approval or rejection. Worker management routes issue one-time enrollments and list or revoke owned agents. `dependencies.py` authenticates registrations and per-agent requests without holding a database connection during long polling. Worker Gateway routes expose registration, heartbeat, claim, renewal, result upload, completion, and failure. Services own state changes; routes own HTTP validation and authorization boundaries.
 
 ### `auth/`
 
-Human, Producer, and Worker authentication primitives. Passwords use Argon2id. Opaque session, CSRF, Producer API, Worker enrollment, and Worker Agent tokens are generated cryptographically; PostgreSQL stores only hashes. Enrollments are short-lived and single-use. Agent credentials expire, rotate on re-enrollment, can be revoked, and are bound to one owner, Worker ID, Job Type, and queue.
+Human, Producer, and Worker authentication primitives. Passwords use Argon2id. Opaque session, CSRF, Producer API, Worker enrollment, and Worker Agent tokens are generated cryptographically; PostgreSQL stores only hashes. Enrollments are short-lived and single-use. Agent credentials expire, rotate on re-enrollment, can be revoked, and are bound to one owner, Worker ID, Job Type, and queue. `handler_signing.py` defines canonical Ed25519 release signing and verification; `signing_cli.py` generates platform key pairs.
 
 ### `domain/`
 
@@ -54,7 +54,7 @@ Core concepts and rules: job entities, statuses, state transitions, user roles, 
 
 ### `persistence/`
 
-SQLAlchemy models, database sessions, migrations, and repositories for users, roles, browser sessions, Producer credentials, Worker enrollments and credentials, Job Types, jobs, attempts, workers, results, and dead letters. Job rows retain immutable ownership snapshots. Worker credentials link an owned agent to the exact enrolled Job Type. Producer idempotency and Publisher ownership are enforced by PostgreSQL.
+SQLAlchemy models, database sessions, migrations, and repositories for users, roles, browser sessions, Producer credentials, Worker enrollments and credentials, Job Types, handler approval audits and signatures, jobs, attempts, workers, results, and dead letters. Job rows retain immutable ownership snapshots. Worker credentials link an owned agent to the exact enrolled Job Type. Producer idempotency and Publisher ownership are enforced by PostgreSQL.
 
 ### `queueing/`
 

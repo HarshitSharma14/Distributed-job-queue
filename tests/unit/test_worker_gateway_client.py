@@ -70,7 +70,10 @@ def test_client_downloads_and_verifies_assigned_handler_without_storage_credenti
                 json={
                     "job_type_id": "job-type-1",
                     "job_type": "generate_report",
+                    "version": 1,
                     "sha256": digest,
+                    "signing_key_id": "platform-key",
+                    "release_signature": "signature",
                     "download_url": "https://storage.example.com/handler.zip",
                     "expires_at": "2026-08-29T12:00:00+00:00",
                 },
@@ -87,6 +90,8 @@ def test_client_downloads_and_verifies_assigned_handler_without_storage_credenti
 
     assert downloaded.job_type_id == "job-type-1"
     assert downloaded.job_type == "generate_report"
+    assert downloaded.version == 1
+    assert downloaded.signing_key_id == "platform-key"
     assert downloaded.content == content
     assert requests[0].headers["authorization"] == "Bearer worker-secret"
     assert "authorization" not in requests[1].headers
@@ -100,7 +105,10 @@ def test_client_rejects_handler_when_download_digest_changes():
                 json={
                     "job_type_id": "job-type-1",
                     "job_type": "generate_report",
+                    "version": 1,
                     "sha256": "0" * 64,
+                    "signing_key_id": "platform-key",
+                    "release_signature": "signature",
                     "download_url": "https://storage.example.com/handler.zip",
                     "expires_at": "2026-08-29T12:00:00+00:00",
                 },

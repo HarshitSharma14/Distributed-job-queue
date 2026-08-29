@@ -133,6 +133,19 @@ def require_publisher_write_principal(
     return _validate_csrf(request, principal)
 
 
+def require_admin_write_principal(
+    request: Request,
+    principal: Annotated[AuthenticatedPrincipal, Depends(require_current_principal)],
+) -> AuthenticatedPrincipal:
+    if UserRole.ADMIN not in principal.roles:
+        raise APIError(
+            status_code=status.HTTP_403_FORBIDDEN,
+            code="ADMIN_ROLE_REQUIRED",
+            message="Admin role required",
+        )
+    return _validate_csrf(request, principal)
+
+
 def _validate_csrf(
     request: Request, principal: AuthenticatedPrincipal
 ) -> AuthenticatedPrincipal:

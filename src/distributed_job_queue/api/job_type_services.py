@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from distributed_job_queue.auth.service import AuthenticatedPrincipal
+from distributed_job_queue.auth.handler_signing import HandlerSigningError, sign_release
 from distributed_job_queue.common.config import load_settings
 from distributed_job_queue.domain.identity import (
     HandlerArtifactStatus,
@@ -29,6 +30,14 @@ class JobTypeStateConflict(ValueError):
 
 class HandlerArtifactNotReady(ValueError):
     """Raised when the reserved handler object is not available for verification."""
+
+
+class HandlerApprovalConflict(ValueError):
+    """Raised when an Admin decision is invalid for the release state."""
+
+
+class HandlerSigningUnavailable(RuntimeError):
+    """Raised when the platform cannot sign an approved release."""
 
 
 def create_draft_job_type(
@@ -132,7 +141,7 @@ def reserve_handler_upload(
     return artifact, upload.upload_url
 
 
-def verify_handler_and_activate(
+def verify_handler_for_approval(
     session: Session,
     storage: MinioHandlerStorage,
     job_type_id: str,
@@ -194,8 +203,93 @@ def verify_handler_and_activate(
     )
     storage.promote(source_ref=artifact.object_ref, verified_ref=verified_ref)
     artifact.verified_ref = verified_ref
-    job_type.handler_ref = verified_ref
+    job_type.status = JobTypeStatus.PENDING_APPROVAL.value
+    session.flush()
+    return artifact, job_type
+
+
+def approve_handler_release(
+    session: Session,
+    job_type_id: str,
+    artifact_id: str,
+    *,
+    admin_user_id: str,
+) -> tuple[HandlerArtifact, JobType]:
+    repository = IdentityRepository(session)
+    job_type = repository.get_job_type(job_type_id, for_update=True)
+    if job_type is None:
+        raise LookupError("Job Type not found")
+    artifact = repository.get_handler_artifact(
+        artifact_id, job_type_id=job_type.id, for_update=True
+    )
+    if artifact is None:
+        raise LookupError("Handler artifact not found")
+    if artifact.status == HandlerArtifactStatus.APPROVED.value:
+        return artifact, job_type
+    if (
+        artifact.status != HandlerArtifactStatus.VERIFIED.value
+        or job_type.status != JobTypeStatus.PENDING_APPROVAL.value
+        or not artifact.verified_ref
+        or not artifact.actual_digest
+    ):
+        raise HandlerApprovalConflict("Handler release is not awaiting approval")
+
+    settings = load_settings()
+    if not settings.handler_signing_private_key:
+        raise HandlerSigningUnavailable("Handler signing key is not configured")
+    try:
+        signature = sign_release(
+            settings.handler_signing_private_key,
+            job_type_id=job_type.id,
+            job_type=job_type.name,
+            version=job_type.version,
+            digest=artifact.actual_digest,
+        )
+    except HandlerSigningError as exc:
+        raise HandlerSigningUnavailable(str(exc)) from exc
+
+    now = datetime.now(timezone.utc)
+    artifact.status = HandlerArtifactStatus.APPROVED.value
+    artifact.approved_by_user_id = admin_user_id
+    artifact.approved_at = now
+    artifact.signing_key_id = settings.handler_signing_key_id
+    artifact.release_signature = signature
+    artifact.rejection_reason = None
+    job_type.handler_ref = artifact.verified_ref
     job_type.handler_digest = artifact.actual_digest
+    job_type.handler_signing_key_id = settings.handler_signing_key_id
+    job_type.handler_release_signature = signature
     job_type.status = JobTypeStatus.ACTIVE.value
+    session.flush()
+    return artifact, job_type
+
+
+def reject_handler_release(
+    session: Session,
+    job_type_id: str,
+    artifact_id: str,
+    *,
+    admin_user_id: str,
+    reason: str,
+) -> tuple[HandlerArtifact, JobType]:
+    repository = IdentityRepository(session)
+    job_type = repository.get_job_type(job_type_id, for_update=True)
+    if job_type is None:
+        raise LookupError("Job Type not found")
+    artifact = repository.get_handler_artifact(
+        artifact_id, job_type_id=job_type.id, for_update=True
+    )
+    if artifact is None:
+        raise LookupError("Handler artifact not found")
+    if (
+        artifact.status != HandlerArtifactStatus.VERIFIED.value
+        or job_type.status != JobTypeStatus.PENDING_APPROVAL.value
+    ):
+        raise HandlerApprovalConflict("Handler release is not awaiting approval")
+    artifact.status = HandlerArtifactStatus.REJECTED.value
+    artifact.rejection_reason = reason.strip()
+    artifact.rejected_by_user_id = admin_user_id
+    artifact.rejected_at = datetime.now(timezone.utc)
+    job_type.status = JobTypeStatus.DRAFT.value
     session.flush()
     return artifact, job_type

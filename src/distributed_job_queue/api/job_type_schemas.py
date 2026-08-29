@@ -24,6 +24,8 @@ class JobTypeResponse(BaseModel):
     status: JobTypeStatus
     handler_ref: str | None
     handler_digest: str | None
+    handler_signing_key_id: str | None
+    handler_release_signature: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -50,3 +52,15 @@ class HandlerVerificationResponse(BaseModel):
     expected_size_bytes: int
     actual_size_bytes: int | None
     rejection_reason: str | None
+    approved_by_user_id: str | None
+    approved_at: datetime | None
+    rejected_by_user_id: str | None
+    rejected_at: datetime | None
+    signing_key_id: str | None
+    release_signature: str | None
+
+
+class HandlerRejectionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(min_length=1, max_length=2_000)

@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import json
+import base64
 from dataclasses import dataclass
 from io import BytesIO
 from uuid import uuid4
@@ -8,11 +9,14 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 import httpx
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from sqlalchemy.orm import Session
 
 from distributed_job_queue.api.app import app
 from distributed_job_queue.api.dependencies import get_session
 from distributed_job_queue.auth.security import CSRF_COOKIE_NAME, CSRF_HEADER_NAME, hash_password
+from distributed_job_queue.auth.handler_signing import parse_trusted_public_keys, verify_release
 from distributed_job_queue.common.config import load_settings
 from distributed_job_queue.domain.identity import UserRole
 from distributed_job_queue.persistence.database import engine
@@ -21,6 +25,20 @@ from distributed_job_queue.persistence.repositories import IdentityRepository
 from distributed_job_queue.storage import MinioHandlerStorage
 
 PASSWORD = "correct-horse-battery-staple"
+SIGNING_PRIVATE_KEY = Ed25519PrivateKey.generate()
+SIGNING_PRIVATE_KEY_B64 = base64.b64encode(
+    SIGNING_PRIVATE_KEY.private_bytes(
+        serialization.Encoding.Raw,
+        serialization.PrivateFormat.Raw,
+        serialization.NoEncryption(),
+    )
+).decode("ascii")
+SIGNING_PUBLIC_KEY_B64 = base64.b64encode(
+    SIGNING_PRIVATE_KEY.public_key().public_bytes(
+        serialization.Encoding.Raw,
+        serialization.PublicFormat.Raw,
+    )
+).decode("ascii")
 
 
 @dataclass(frozen=True)
@@ -34,7 +52,13 @@ class JobTypeAPIContext:
 
 
 @pytest.fixture
-def job_type_context():
+def job_type_context(monkeypatch):
+    monkeypatch.setenv("HANDLER_SIGNING_KEY_ID", "integration-key")
+    monkeypatch.setenv("HANDLER_SIGNING_PRIVATE_KEY", SIGNING_PRIVATE_KEY_B64)
+    monkeypatch.setenv(
+        "HANDLER_TRUSTED_PUBLIC_KEYS",
+        json.dumps({"integration-key": SIGNING_PUBLIC_KEY_B64}),
+    )
     connection = engine.connect()
     transaction = connection.begin()
     session = Session(bind=connection, expire_on_commit=False)
@@ -169,7 +193,7 @@ def test_publisher_creates_lists_reads_and_disables_draft(job_type_context):
             )
             assert verified.status_code == 200
             assert verified.json()["artifact_status"] == "VERIFIED"
-            assert verified.json()["job_type_status"] == "ACTIVE"
+            assert verified.json()["job_type_status"] == "PENDING_APPROVAL"
             stored_job_type = job_type_context.session.get(
                 JobType, body["job_type_id"]
             )
@@ -178,15 +202,55 @@ def test_publisher_creates_lists_reads_and_disables_draft(job_type_context):
             )
             assert stored_job_type is not None
             assert stored_artifact is not None
+            assert stored_job_type.handler_ref is None
+            assert stored_artifact.verified_ref != upload["object_ref"]
+
+            publisher_cannot_approve = await client.post(
+                f"/job-types/{body['job_type_id']}/handler-artifacts/"
+                f"{upload['artifact_id']}/approve",
+                headers={CSRF_HEADER_NAME: csrf_token},
+            )
+            assert publisher_cannot_approve.status_code == 403
+
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app),
+                base_url="http://testserver",
+            ) as admin_client:
+                admin_csrf = await login(admin_client, job_type_context.admin)
+                approved = await admin_client.post(
+                    f"/job-types/{body['job_type_id']}/handler-artifacts/"
+                    f"{upload['artifact_id']}/approve",
+                    headers={CSRF_HEADER_NAME: admin_csrf},
+                )
+            assert approved.status_code == 200
+            approval = approved.json()
+            assert approval["artifact_status"] == "APPROVED"
+            assert approval["job_type_status"] == "ACTIVE"
+            assert approval["approved_by_user_id"] == job_type_context.admin.id
+            assert approval["signing_key_id"] == "integration-key"
+            verify_release(
+                parse_trusted_public_keys(
+                    json.dumps({"integration-key": SIGNING_PUBLIC_KEY_B64})
+                ),
+                key_id=approval["signing_key_id"],
+                signature_b64=approval["release_signature"],
+                job_type_id=body["job_type_id"],
+                job_type="generate_report",
+                version=1,
+                digest=stored_artifact.actual_digest,
+            )
+            job_type_context.session.expire_all()
+            stored_job_type = job_type_context.session.get(
+                JobType, body["job_type_id"]
+            )
             assert stored_job_type.handler_ref == stored_artifact.verified_ref
-            assert stored_job_type.handler_ref != upload["object_ref"]
 
             overwritten_upload = httpx.put(
                 upload["upload_url"], content=b"changed after verification"
             )
             assert overwritten_upload.status_code == 200
             promoted = job_type_context.storage.client.get_object(
-                job_type_context.storage.bucket, stored_job_type.handler_ref
+                job_type_context.storage.bucket, stored_artifact.verified_ref
             )
             try:
                 assert promoted.read() == bundle
@@ -247,6 +311,96 @@ def test_digest_mismatch_rejects_artifact_without_activation(job_type_context):
     asyncio.run(scenario())
 
 
+def test_admin_can_reject_verified_release_and_return_job_type_to_draft(
+    job_type_context,
+):
+    async def scenario():
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://testserver"
+        ) as publisher_client:
+            publisher_csrf = await login(
+                publisher_client, job_type_context.publisher
+            )
+            job_type_id, artifact_id, bundle = await create_verified_release(
+                publisher_client,
+                publisher_csrf,
+                name="admin_rejected_handler",
+            )
+
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://testserver"
+        ) as admin_client:
+            admin_csrf = await login(admin_client, job_type_context.admin)
+            rejected = await admin_client.post(
+                f"/job-types/{job_type_id}/handler-artifacts/{artifact_id}/reject",
+                headers={CSRF_HEADER_NAME: admin_csrf},
+                json={"reason": "Handler requires unsafe external access"},
+            )
+
+        assert rejected.status_code == 200
+        body = rejected.json()
+        assert body["artifact_status"] == "REJECTED"
+        assert body["job_type_status"] == "DRAFT"
+        assert body["rejected_by_user_id"] == job_type_context.admin.id
+        assert body["rejected_at"]
+        assert body["rejection_reason"] == "Handler requires unsafe external access"
+
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://testserver"
+        ) as publisher_client:
+            publisher_csrf = await login(
+                publisher_client, job_type_context.publisher
+            )
+            replacement = await publisher_client.post(
+                f"/job-types/{job_type_id}/handler-upload",
+                headers={CSRF_HEADER_NAME: publisher_csrf},
+                json={
+                    "expected_sha256": hashlib.sha256(bundle).hexdigest(),
+                    "size_bytes": len(bundle),
+                },
+            )
+            assert replacement.status_code == 201
+
+    asyncio.run(scenario())
+
+
+def test_admin_approval_fails_closed_without_private_signing_key(
+    job_type_context, monkeypatch
+):
+    async def scenario():
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://testserver"
+        ) as publisher_client:
+            publisher_csrf = await login(
+                publisher_client, job_type_context.publisher
+            )
+            job_type_id, artifact_id, _ = await create_verified_release(
+                publisher_client,
+                publisher_csrf,
+                name="unsigned_handler",
+            )
+
+        monkeypatch.delenv("HANDLER_SIGNING_PRIVATE_KEY", raising=False)
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://testserver"
+        ) as admin_client:
+            admin_csrf = await login(admin_client, job_type_context.admin)
+            approval = await admin_client.post(
+                f"/job-types/{job_type_id}/handler-artifacts/{artifact_id}/approve",
+                headers={CSRF_HEADER_NAME: admin_csrf},
+            )
+
+        assert approval.status_code == 503
+        assert approval.json()["error"]["code"] == "HANDLER_SIGNING_UNAVAILABLE"
+        job_type = job_type_context.session.get(JobType, job_type_id)
+        assert job_type.status == "PENDING_APPROVAL"
+        assert job_type.handler_ref is None
+
+    asyncio.run(scenario())
+
+
 def test_publishers_are_isolated_and_admin_can_see_all(job_type_context):
     async def scenario():
         transport = httpx.ASGITransport(app=app)
@@ -303,3 +457,35 @@ def handler_bundle(job_type: str) -> bytes:
         )
         archive.writestr("handler.py", "def handle(payload):\n    return payload\n")
     return content.getvalue()
+
+
+async def create_verified_release(
+    client: httpx.AsyncClient,
+    csrf_token: str,
+    *,
+    name: str,
+) -> tuple[str, str, bytes]:
+    created = await client.post(
+        "/job-types",
+        headers={CSRF_HEADER_NAME: csrf_token},
+        json={"name": name, "queue": "reports"},
+    )
+    job_type_id = created.json()["job_type_id"]
+    bundle = handler_bundle(name)
+    reserved = await client.post(
+        f"/job-types/{job_type_id}/handler-upload",
+        headers={CSRF_HEADER_NAME: csrf_token},
+        json={
+            "expected_sha256": hashlib.sha256(bundle).hexdigest(),
+            "size_bytes": len(bundle),
+        },
+    )
+    artifact_id = reserved.json()["artifact_id"]
+    assert httpx.put(reserved.json()["upload_url"], content=bundle).status_code == 200
+    verified = await client.post(
+        f"/job-types/{job_type_id}/handler-artifacts/{artifact_id}/verify",
+        headers={CSRF_HEADER_NAME: csrf_token},
+    )
+    assert verified.status_code == 200
+    assert verified.json()["job_type_status"] == "PENDING_APPROVAL"
+    return job_type_id, artifact_id, bundle

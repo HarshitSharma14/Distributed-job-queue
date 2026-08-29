@@ -17,6 +17,7 @@ class UserRole(StrEnum):
 
 class JobTypeStatus(StrEnum):
     DRAFT = "DRAFT"
+    PENDING_APPROVAL = "PENDING_APPROVAL"
     ACTIVE = "ACTIVE"
     DISABLED = "DISABLED"
 
@@ -24,6 +25,7 @@ class JobTypeStatus(StrEnum):
 class HandlerArtifactStatus(StrEnum):
     PENDING = "PENDING"
     VERIFIED = "VERIFIED"
+    APPROVED = "APPROVED"
     REJECTED = "REJECTED"
 
 

@@ -64,6 +64,9 @@ class WorkerAgentPrincipal:
     job_type_status: str
     handler_ref: str | None
     handler_digest: str | None
+    job_type_version: int
+    handler_signing_key_id: str | None
+    handler_release_signature: str | None
 
 
 def issue_worker_enrollment(
@@ -79,6 +82,8 @@ def issue_worker_enrollment(
         job_type is None
         or job_type.status != JobTypeStatus.ACTIVE.value
         or not job_type.handler_ref
+        or not job_type.handler_signing_key_id
+        or not job_type.handler_release_signature
     ):
         raise WorkerEnrollmentRejected(
             "Worker enrollment requires an active Job Type with a verified handler"
@@ -130,6 +135,8 @@ def authenticate_worker_enrollment(
         or UserRole.WORKER.value not in roles
         or enrollment.job_type.status != JobTypeStatus.ACTIVE.value
         or not enrollment.job_type.handler_ref
+        or not enrollment.job_type.handler_signing_key_id
+        or not enrollment.job_type.handler_release_signature
     ):
         return None
     return WorkerEnrollmentPrincipal(enrollment)
@@ -222,4 +229,7 @@ def authenticate_worker_agent(
         job_type_status=credential.enrollment.job_type.status,
         handler_ref=credential.enrollment.job_type.handler_ref,
         handler_digest=credential.enrollment.job_type.handler_digest,
+        job_type_version=credential.enrollment.job_type.version,
+        handler_signing_key_id=credential.enrollment.job_type.handler_signing_key_id,
+        handler_release_signature=credential.enrollment.job_type.handler_release_signature,
     )

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from distributed_job_queue.api.auth_dependencies import (
+    require_admin_write_principal,
     require_publisher_principal,
     require_publisher_write_principal,
 )
@@ -16,11 +17,14 @@ from distributed_job_queue.api.job_type_schemas import (
     HandlerUploadRequest,
     HandlerUploadResponse,
     HandlerVerificationResponse,
+    HandlerRejectionRequest,
     JobTypeCreateRequest,
     JobTypeResponse,
 )
 from distributed_job_queue.api.job_type_services import (
     HandlerArtifactNotReady,
+    HandlerApprovalConflict,
+    HandlerSigningUnavailable,
     JobTypeConflict,
     JobTypeStateConflict,
     create_draft_job_type,
@@ -28,7 +32,9 @@ from distributed_job_queue.api.job_type_services import (
     get_visible_job_type,
     list_visible_job_types,
     reserve_handler_upload,
-    verify_handler_and_activate,
+    approve_handler_release,
+    reject_handler_release,
+    verify_handler_for_approval,
 )
 from distributed_job_queue.auth.service import AuthenticatedPrincipal
 from distributed_job_queue.domain.identity import UserRole
@@ -170,7 +176,7 @@ def verify_handler_artifact(
     storage: Annotated[MinioHandlerStorage, Depends(get_handler_storage)],
 ) -> HandlerVerificationResponse:
     try:
-        artifact, job_type = verify_handler_and_activate(
+        artifact, job_type = verify_handler_for_approval(
             session,
             storage,
             str(job_type_id),
@@ -194,6 +200,74 @@ def verify_handler_artifact(
     return _verification_response(artifact, job_type)
 
 
+@router.post(
+    "/{job_type_id}/handler-artifacts/{artifact_id}/approve",
+    response_model=HandlerVerificationResponse,
+)
+def approve_handler_artifact(
+    job_type_id: UUID,
+    artifact_id: UUID,
+    principal: Annotated[
+        AuthenticatedPrincipal, Depends(require_admin_write_principal)
+    ],
+    session: Annotated[Session, Depends(get_session)],
+) -> HandlerVerificationResponse:
+    try:
+        artifact, job_type = approve_handler_release(
+            session,
+            str(job_type_id),
+            str(artifact_id),
+            admin_user_id=principal.user_id,
+        )
+    except LookupError as exc:
+        raise _not_found() from exc
+    except HandlerApprovalConflict as exc:
+        raise APIError(
+            status_code=status.HTTP_409_CONFLICT,
+            code="HANDLER_APPROVAL_CONFLICT",
+            message=str(exc),
+        ) from exc
+    except HandlerSigningUnavailable as exc:
+        raise APIError(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            code="HANDLER_SIGNING_UNAVAILABLE",
+            message=str(exc),
+        ) from exc
+    return _verification_response(artifact, job_type)
+
+
+@router.post(
+    "/{job_type_id}/handler-artifacts/{artifact_id}/reject",
+    response_model=HandlerVerificationResponse,
+)
+def reject_handler_artifact(
+    job_type_id: UUID,
+    artifact_id: UUID,
+    request: HandlerRejectionRequest,
+    principal: Annotated[
+        AuthenticatedPrincipal, Depends(require_admin_write_principal)
+    ],
+    session: Annotated[Session, Depends(get_session)],
+) -> HandlerVerificationResponse:
+    try:
+        artifact, job_type = reject_handler_release(
+            session,
+            str(job_type_id),
+            str(artifact_id),
+            admin_user_id=principal.user_id,
+            reason=request.reason,
+        )
+    except LookupError as exc:
+        raise _not_found() from exc
+    except HandlerApprovalConflict as exc:
+        raise APIError(
+            status_code=status.HTTP_409_CONFLICT,
+            code="HANDLER_APPROVAL_CONFLICT",
+            message=str(exc),
+        ) from exc
+    return _verification_response(artifact, job_type)
+
+
 def _response(job_type: JobType) -> JobTypeResponse:
     return JobTypeResponse(
         job_type_id=job_type.id,
@@ -204,6 +278,8 @@ def _response(job_type: JobType) -> JobTypeResponse:
         status=job_type.status,
         handler_ref=job_type.handler_ref,
         handler_digest=job_type.handler_digest,
+        handler_signing_key_id=job_type.handler_signing_key_id,
+        handler_release_signature=job_type.handler_release_signature,
         created_at=job_type.created_at,
         updated_at=job_type.updated_at,
     )
@@ -221,6 +297,12 @@ def _verification_response(
         expected_size_bytes=artifact.expected_size_bytes,
         actual_size_bytes=artifact.actual_size_bytes,
         rejection_reason=artifact.rejection_reason,
+        approved_by_user_id=artifact.approved_by_user_id,
+        approved_at=artifact.approved_at,
+        rejected_by_user_id=artifact.rejected_by_user_id,
+        rejected_at=artifact.rejected_at,
+        signing_key_id=artifact.signing_key_id,
+        release_signature=artifact.release_signature,
     )
 
 

@@ -193,6 +193,8 @@ Registration accepts a short-lived, one-time opaque enrollment token created by 
 
 The agent credential can request a short-lived signed GET URL only for its assigned immutable handler. The Worker downloads without permanent credentials, enforces limits, verifies SHA-256, and rechecks the ZIP manifest. Executing downloaded code requires an explicit runtime flag and uses a fresh restricted Docker container per attempt. The agent process never imports Publisher code.
 
+The URL signature controls temporary storage access; it is not the release signature. Publisher verification places the immutable bundle in `PENDING_APPROVAL`. An Admin signs the exact Job Type ID, name, version, and SHA-256 digest with Ed25519 before activation. The API alone receives the private key. Workers receive a map of trusted public keys and reject unknown key IDs, altered metadata, or invalid signatures before installation. The `cryptography` package provides Ed25519 primitives, and key IDs support rotation.
+
 The sandbox uses a digest-pinned Python image, no network, read-only root and handler filesystems, a non-root user, dropped capabilities, `no-new-privileges`, default seccomp, and CPU, memory/swap, PID, file-descriptor, timeout, and output limits. JSON over stdin/stdout is the only execution protocol. Docker is the practical free/local choice; stronger hostile multi-tenant deployments should evaluate gVisor or microVM isolation.
 
 ---
@@ -301,6 +303,8 @@ Worker HTTP Client:   httpx
 Worker Infrastructure Access: None
 Result Storage:      MinIO
 Handler Storage:     Private MinIO bucket with signed uploads and immutable promotion
+Handler Approval:    Admin-controlled release activation
+Release Signing:     Ed25519 via cryptography; API private key + Worker trusted public keys
 Deployment:          Docker Compose
 Testing:             Pytest
 Logging:             Python logging with redacted JSON output

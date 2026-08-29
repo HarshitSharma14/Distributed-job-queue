@@ -5,8 +5,8 @@ This is the working checklist for implementation. We complete and verify each it
 ## Current focus
 
 - **Current phase:** Phase 7.5 — Role-scoped dashboard product
-- **Next step:** Add Admin approval and artifact-signing policy for Publisher handler releases
-- **Current milestone:** Downloaded Publisher handlers execute through ephemeral restricted Docker containers instead of inside the Worker Agent; 143 tests pass
+- **Next step:** Add immutable new Job Type version creation
+- **Current milestone:** Verified Publisher handlers require Admin approval and an Ed25519 release signature before activation; workers verify the exact signed release before installation; all 149 tests pass with no Alembic drift
 
 ## Phase 1 — Project foundation
 
@@ -77,7 +77,8 @@ This is the working checklist for implementation. We complete and verify each it
 
 - [x] Define worker credential issuance, expiration, rotation, and revocation
 - [x] Define publisher, producer, worker, and admin authorization scopes
-- [ ] Define handler approval, signing, and full versioning policy
+- [x] Add Admin handler approval and Ed25519 release-signing policy
+- [ ] Complete immutable Job Type version creation and signing-key rotation workflows
 - [x] Validate handler digest, size, ZIP structure, paths, manifest, and entrypoint
 - [x] Return temporary signed upload URLs for handler artifacts
 - [x] Deliver verified handlers through agent-authorized temporary signed download URLs
@@ -112,7 +113,8 @@ This is the working checklist for implementation. We complete and verify each it
 - [ ] Apply role and ownership authorization to remaining product APIs
 - [x] Replace the shared Worker Gateway token with per-agent credentials
 - [x] Add Publisher Job Type creation, listing, detail, and disable APIs
-- [x] Add handler-artifact upload, integrity/structure verification, immutable promotion, and activation
+- [x] Add handler-artifact upload, integrity/structure verification, and immutable promotion
+- [x] Add Admin approval/rejection, release audit data, and signed activation
 - [ ] Add new immutable Job Type version creation
 - [ ] Add publisher-scoped job and analytics APIs
 - [ ] Add producer-scoped job detail and history APIs
@@ -190,3 +192,4 @@ This is the working checklist for implementation. We complete and verify each it
 | 2026-08-29 | Per-agent Worker credentials added | Added CSRF-protected one-time enrollments, hashed and expiring agent credentials, automatic rotation, dashboard listing and revocation, exact Worker/Job Type/queue authorization, migration `0012`, runtime token exchange, and impersonation/cross-Publisher coverage; all 135 tests pass |
 | 2026-08-29 | Signed Worker handler delivery added | Added agent-scoped signed downloads, bounded credential-free transfer, local SHA-256 and ZIP/manifest revalidation, temporary installation, exact assignment checks, and explicit opt-in before Publisher code executes; all 140 tests pass |
 | 2026-08-29 | Downloaded handler isolation added | Removed in-process imports of Publisher code and added per-attempt Docker execution with no network or host secrets, read-only mounts/root, non-root identity, dropped capabilities, pinned image, bounded resources/output/time, cleanup, and real container isolation tests; all 143 tests pass |
+| 2026-08-29 | Signed Admin handler approval added | Added `PENDING_APPROVAL`, Admin-only approval/rejection with audit fields, Ed25519 release signatures bound to Job Type identity/version/digest, worker trusted-key verification, key-generation CLI, migration `0013`, and fail-closed coverage; all 149 tests pass with no Alembic drift |

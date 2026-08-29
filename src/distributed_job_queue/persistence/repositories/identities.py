@@ -64,6 +64,8 @@ class IdentityRepository:
         version: int = 1,
         handler_ref: str | None = None,
         handler_digest: str | None = None,
+        handler_signing_key_id: str | None = None,
+        handler_release_signature: str | None = None,
         status: JobTypeStatus = JobTypeStatus.ACTIVE,
     ) -> JobType:
         job_type = JobType(
@@ -74,6 +76,8 @@ class IdentityRepository:
             status=status.value,
             handler_ref=handler_ref,
             handler_digest=handler_digest,
+            handler_signing_key_id=handler_signing_key_id,
+            handler_release_signature=handler_release_signature,
         )
         self.session.add(job_type)
         self.session.flush()

@@ -214,6 +214,8 @@ def create_enrollment_token(
         queue=queue_name,
         handler_ref=f"handlers/{capability}.zip",
         handler_digest="a" * 64,
+        handler_signing_key_id="test-key",
+        handler_release_signature="test-signature",
     )
     _active_job_type_id = job_type.id
     return issue_worker_enrollment(
@@ -434,6 +436,9 @@ def test_agent_receives_only_its_assigned_handler_download(gateway_context):
     assert body["job_type_id"] == _active_job_type_id
     assert body["job_type"] == "generate_report"
     assert body["sha256"] == "a" * 64
+    assert body["version"] == 1
+    assert body["signing_key_id"] == "test-key"
+    assert body["release_signature"] == "test-signature"
     assert body["download_url"] == "https://storage.example.com/signed-handler"
     assert storage.calls == [("handlers/generate_report.zip", 300)]
 
@@ -567,6 +572,8 @@ def test_gateway_rejects_same_named_job_type_from_another_publisher(
         queue=queue_name,
         handler_ref="handlers/other-report.zip",
         handler_digest="b" * 64,
+        handler_signing_key_id="test-key",
+        handler_release_signature="other-signature",
     )
     job = JobRepository(session).create(
         job_type="generate_report",

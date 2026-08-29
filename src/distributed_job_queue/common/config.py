@@ -63,6 +63,9 @@ class Settings:
     handler_sandbox_pids: int
     handler_sandbox_timeout_seconds: int
     handler_sandbox_max_output_bytes: int
+    handler_signing_key_id: str
+    handler_signing_private_key: str | None
+    handler_trusted_public_keys: str
     metrics_token: str
     metrics_port: int
     worker_gateway_url: str
@@ -145,6 +148,11 @@ def load_settings() -> Settings:
         ),
         handler_sandbox_max_output_bytes=_get_int(
             "HANDLER_SANDBOX_MAX_OUTPUT_BYTES", 1024 * 1024, minimum=1024
+        ),
+        handler_signing_key_id=os.getenv("HANDLER_SIGNING_KEY_ID", "local-dev"),
+        handler_signing_private_key=os.getenv("HANDLER_SIGNING_PRIVATE_KEY"),
+        handler_trusted_public_keys=os.getenv(
+            "HANDLER_TRUSTED_PUBLIC_KEYS", "{}"
         ),
         metrics_token=metrics_token,
         metrics_port=_get_int("METRICS_PORT", 0, minimum=0),

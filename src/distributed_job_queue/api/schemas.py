@@ -95,7 +95,10 @@ class WorkerHeartbeatResponse(BaseModel):
 class WorkerHandlerDownloadResponse(BaseModel):
     job_type_id: str
     job_type: str
+    version: int
     sha256: str
+    signing_key_id: str
+    release_signature: str
     download_url: str
     expires_at: datetime
 

@@ -31,6 +31,9 @@ def test_load_settings_uses_development_defaults():
     assert settings.handler_sandbox_pids == 64
     assert settings.handler_sandbox_timeout_seconds == 300
     assert settings.handler_sandbox_max_output_bytes == 1024 * 1024
+    assert settings.handler_signing_key_id == "local-dev"
+    assert settings.handler_signing_private_key is None
+    assert settings.handler_trusted_public_keys == "{}"
     assert settings.metrics_token == "dev-metrics-token"
     assert settings.metrics_port == 0
     assert settings.max_attempts == 5
@@ -68,6 +71,9 @@ def test_load_settings_parses_environment_values(monkeypatch):
     monkeypatch.setenv("HANDLER_SANDBOX_PIDS", "32")
     monkeypatch.setenv("HANDLER_SANDBOX_TIMEOUT_SECONDS", "45")
     monkeypatch.setenv("HANDLER_SANDBOX_MAX_OUTPUT_BYTES", "4096")
+    monkeypatch.setenv("HANDLER_SIGNING_KEY_ID", "test-key")
+    monkeypatch.setenv("HANDLER_SIGNING_PRIVATE_KEY", "private-key")
+    monkeypatch.setenv("HANDLER_TRUSTED_PUBLIC_KEYS", '{"test-key":"public"}')
     monkeypatch.setenv("MAX_ATTEMPTS", "3")
     monkeypatch.setenv("SCHEDULER_BATCH_SIZE", "25")
     monkeypatch.setenv("SCHEDULER_POLL_INTERVAL_SECONDS", "2")
@@ -101,6 +107,9 @@ def test_load_settings_parses_environment_values(monkeypatch):
     assert settings.handler_sandbox_pids == 32
     assert settings.handler_sandbox_timeout_seconds == 45
     assert settings.handler_sandbox_max_output_bytes == 4096
+    assert settings.handler_signing_key_id == "test-key"
+    assert settings.handler_signing_private_key == "private-key"
+    assert settings.handler_trusted_public_keys == '{"test-key":"public"}'
     assert settings.max_attempts == 3
     assert settings.scheduler_batch_size == 25
     assert settings.scheduler_poll_interval_seconds == 2

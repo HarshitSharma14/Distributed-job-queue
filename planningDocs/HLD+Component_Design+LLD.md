@@ -331,7 +331,7 @@ Workers communicate only with the gateway using a credential bound to one Worker
 
 After assignment, a worker receives only the required job payload, approved handler metadata, a fenced lease token, and temporary signed artifact URLs when needed. It cannot query databases, modify queues, access unrelated jobs, or call internal services directly.
 
-The platform controls state and infrastructure; workers execute approved workloads. Credential issuance, rotation, signed handler delivery, and Docker-based execution isolation are defined below. Administrative code approval and artifact-signing policy remain separate controls.
+The platform controls state and infrastructure; workers execute approved workloads. Credential issuance, rotation, Admin release approval, signed handler delivery, and Docker-based execution isolation are defined below.
 
 ## Worker endpoints
 
@@ -657,7 +657,10 @@ Publishers create Job Types as `DRAFT`. Publisher queries are ownership-scoped, 
 
 ```text
 DRAFT
-  │ approved handler artifact attached
+  │ handler bundle verified and immutably promoted
+  ▼
+PENDING_APPROVAL
+  │ Admin approves and signs the exact release
   ▼
 ACTIVE
   │ Publisher or Admin disables new submissions
@@ -667,13 +670,50 @@ DISABLED
 
 Only `ACTIVE` Job Types accept new jobs. A Publisher reserves an attempt-scoped object key by declaring the bundle's size and SHA-256 digest, receives a short-lived signed upload URL, and uploads without MinIO credentials. Verification enforces the reserved size and digest, a valid ZIP structure, safe relative paths, no symbolic links or duplicate paths, bounded uncompressed size, and a matching manifest and Python entrypoint.
 
-Verified bytes are copied to a content-addressed object key that was never exposed through an upload URL. The Job Type references only this promoted key, so reusing an unexpired upload URL cannot replace active handler code. Successful verification performs the controlled `DRAFT → ACTIVE` transition; rejected artifacts remain auditable and the Job Type stays `DRAFT`.
+Verified bytes are copied to a content-addressed object key that was never exposed through an upload URL. Verification moves the Job Type from `DRAFT` to `PENDING_APPROVAL`, but does not attach the release to the active Job Type. Admin approval signs and attaches that exact immutable release, then performs `PENDING_APPROVAL → ACTIVE`. Admin rejection records who rejected it and why, then returns the Job Type to `DRAFT` so the Publisher can upload a replacement.
 
-These checks prove integrity and package structure, not that Publisher code is harmless. Worker delivery repeats the checks and requires explicit consent. Docker isolation limits runtime access; signature and administrative approval policy remain separate controls.
+These checks prove integrity and package structure, not that Publisher code is harmless. Admin approval provides a deliberate release gate, and the signature lets workers verify the approved bytes independently. Worker delivery repeats the package checks and still requires explicit execution consent. Docker isolation limits runtime access.
 
 ---
 
-# 15. How is downloaded handler code isolated?
+# 15. How are handler releases approved and trusted?
+
+## Options
+
+### Publisher self-activation
+
+- **Pro:** fastest publishing flow
+- **Con:** the code author can immediately distribute its own executable bundle
+
+### Admin approval without a cryptographic signature
+
+- **Pro:** adds human separation of duties
+- **Con:** workers must trust delivery metadata and cannot independently prove which release was approved
+
+### Admin approval with platform Ed25519 attestation
+
+- **Pro:** combines an auditable human gate with a compact signature workers can verify offline
+- **Pro:** binds approval to the exact Job Type, version, and artifact digest
+- **Con:** requires private-key protection, public-key distribution, and key rotation
+
+### External KMS or managed code-signing service
+
+- **Pro:** strongest operational key controls
+- **Con:** adds cost and deployment complexity beyond the current free-resource target
+
+## Decision
+
+### Choose: Admin approval with platform Ed25519 attestation
+
+Publisher verification produces an immutable `PENDING_APPROVAL` artifact. An authenticated Admin either rejects it with an audit reason or signs a canonical release statement containing the Job Type ID, name, version, and SHA-256 digest. Only the signed release becomes `ACTIVE`.
+
+The signing private key exists only in the API/Admin secret store. Workers are configured only with trusted public keys indexed by key ID. Before installation, a worker reconstructs the canonical statement and rejects unknown keys, malformed signatures, or any mismatch in identity, version, or digest. Key IDs allow controlled rotation without giving workers signing authority.
+
+This signature proves platform approval and release integrity; it does not prove that the code is safe. Runtime isolation remains necessary.
+
+---
+
+# 16. How is downloaded handler code isolated?
 
 ## Options
 
@@ -717,6 +757,16 @@ These flows describe the normal and failure paths the implementation must suppor
 ## 0. Worker enrollment and handler delivery flow
 
 ```text
+Publisher uploads handler bundle
+  ↓
+Platform verifies and immutably promotes it
+  ↓
+Job Type becomes PENDING_APPROVAL
+  ↓
+Admin reviews and signs the exact release
+  ↓
+Job Type becomes ACTIVE
+  ↓
 Worker user creates one-time enrollment
   ↓
 Agent registers through Worker Gateway
@@ -730,6 +780,8 @@ Gateway returns temporary signed GET URL
 Agent downloads directly from private storage
   ↓
 Verify size + SHA-256 + ZIP + manifest
+  ↓
+Verify Admin Ed25519 release signature with trusted public key
   ↓
 Install temporarily
   ↓
@@ -860,6 +912,8 @@ The scheduler and recovery monitor must be safe to restart. Publishing and state
 API Service (FastAPI)
   ├─ validate and submit jobs
   ├─ expose job and worker status
+  ├─ verify Publisher bundles and hold them for Admin approval
+  ├─ sign approved immutable handler releases
   └─ write PostgreSQL jobs + outbox events
 
 Worker Gateway (FastAPI module)
@@ -890,7 +944,7 @@ Outbox Publisher
 Worker Processes
   ├─ communicate only with the Worker Gateway
   ├─ register and heartbeat
-  ├─ securely download and revalidate the assigned handler
+  ├─ securely download, revalidate, and verify the signed assigned handler
   ├─ execute downloaded handlers in ephemeral Docker sandboxes
   └─ report lease renewal, completion, or failure
 
@@ -916,6 +970,7 @@ State:                 PostgreSQL source of truth
 Worker Trust Boundary: No direct database, Redis, or storage access
 Worker Management:     Registration + heartbeats
 Worker Authentication: One-time enrollment + revocable per-agent credential
+Handler Release:       Admin approval + Ed25519 platform attestation
 Remote Execution:      Ephemeral restricted Docker container per attempt
 Failure Recovery:      Job leases + requeue
 Retries:               Exponential backoff with jitter

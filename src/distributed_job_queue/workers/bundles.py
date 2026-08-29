@@ -14,6 +14,8 @@ from zipfile import BadZipFile, ZipFile, is_zipfile
 from distributed_job_queue.workers.gateway_client import DownloadedHandlerBundle
 from distributed_job_queue.workers.handlers import HandlerRegistry
 from distributed_job_queue.workers.sandbox import DockerHandlerSandbox
+from distributed_job_queue.auth.handler_signing import verify_release
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 
 class InvalidDownloadedHandler(ValueError):
@@ -36,9 +38,19 @@ def install_downloaded_handler(
     *,
     max_uncompressed_bytes: int,
     sandbox: DockerHandlerSandbox,
+    trusted_public_keys: dict[str, Ed25519PublicKey],
 ) -> InstalledHandlerBundle:
     """Validate and register a proxy that executes only inside the sandbox."""
 
+    verify_release(
+        trusted_public_keys,
+        key_id=bundle.signing_key_id,
+        signature_b64=bundle.release_signature,
+        job_type_id=bundle.job_type_id,
+        job_type=bundle.job_type,
+        version=bundle.version,
+        digest=bundle.digest,
+    )
     manifest, archive = _inspect_archive(
         bundle.content,
         expected_job_type=bundle.job_type,
