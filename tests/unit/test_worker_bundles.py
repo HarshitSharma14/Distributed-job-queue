@@ -13,6 +13,15 @@ from distributed_job_queue.workers.gateway_client import DownloadedHandlerBundle
 from distributed_job_queue.workers.handlers import HandlerRegistry
 
 
+class RecordingSandbox:
+    def __init__(self):
+        self.calls = []
+
+    def execute(self, root, entrypoint, payload):
+        self.calls.append((root, entrypoint, payload))
+        return payload["report_id"]
+
+
 def make_bundle(files: dict[str, str]) -> DownloadedHandlerBundle:
     output = BytesIO()
     with ZipFile(output, "w", compression=ZIP_DEFLATED) as archive:
@@ -38,13 +47,19 @@ def valid_files() -> dict[str, str]:
 
 def test_downloaded_handler_is_loaded_only_into_assigned_registry():
     registry = HandlerRegistry()
+    sandbox = RecordingSandbox()
     installed = install_downloaded_handler(
         registry,
         make_bundle(valid_files()),
         max_uncompressed_bytes=10_000,
+        sandbox=sandbox,
     )
     try:
         assert registry.handler("generate_report")({"report_id": 42}) == 42
+        assert sandbox.calls[0][1:] == (
+            "handler:handle",
+            {"report_id": 42},
+        )
     finally:
         installed.close()
 
@@ -58,4 +73,5 @@ def test_downloaded_handler_rejects_unsafe_archive_paths():
             HandlerRegistry(),
             make_bundle(files),
             max_uncompressed_bytes=10_000,
+            sandbox=RecordingSandbox(),
         )

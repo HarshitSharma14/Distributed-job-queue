@@ -66,7 +66,7 @@ Transactional outbox publishing. Reads locked PostgreSQL outbox events, idempote
 
 ### `workers/`
 
-Worker execution-agent lifecycle with no infrastructure access. `gateway_client.py` implements authenticated control calls and bounded credential-free handler downloads. `bundles.py` revalidates digests, ZIP paths, size, manifests, and entrypoints before temporary installation. `consumer.py` claims assignments, while `executor.py` runs handlers, renews leases, and reports outcomes. `runner.py` supports trusted local modules or explicit opt-in to assigned Publisher code. No Worker module imports Redis, SQLAlchemy, repositories, or platform session factories.
+Worker execution-agent lifecycle with no infrastructure access. `gateway_client.py` implements authenticated control calls and bounded credential-free downloads. `bundles.py` revalidates and temporarily installs bundles without importing them. `sandbox.py` registers execution proxies and enforces ephemeral Docker isolation; `sandbox_entrypoint.py` is the minimal JSON protocol inside the container. `consumer.py` claims work, while `executor.py` renews leases and reports outcomes. Trusted local modules may run in-process; downloaded Publisher code never does. No Worker module imports Redis, SQLAlchemy, repositories, or platform session factories.
 
 ### `scheduler/`
 

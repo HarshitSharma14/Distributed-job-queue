@@ -191,7 +191,9 @@ Python workers use a synchronous `httpx` client because handler execution is cur
 
 Registration accepts a short-lived, one-time opaque enrollment token created by an authenticated Worker user. The gateway exchanges it for an expiring, revocable opaque credential bound to one Worker Agent and stores only its SHA-256 hash. Every later operation verifies the bound Worker ID, exact Job Type ID, and assigned queue. Re-enrollment rotates the credential; dashboard revocation takes effect immediately.
 
-The agent credential can request a short-lived signed GET URL only for its assigned immutable handler. The Worker downloads directly from private object storage without permanent credentials, enforces transfer and extraction limits, verifies SHA-256, and rechecks the ZIP manifest before temporary installation. Executing downloaded Publisher code requires an explicit Worker runtime flag; process/container sandboxing remains a separate required security decision.
+The agent credential can request a short-lived signed GET URL only for its assigned immutable handler. The Worker downloads without permanent credentials, enforces limits, verifies SHA-256, and rechecks the ZIP manifest. Executing downloaded code requires an explicit runtime flag and uses a fresh restricted Docker container per attempt. The agent process never imports Publisher code.
+
+The sandbox uses a digest-pinned Python image, no network, read-only root and handler filesystems, a non-root user, dropped capabilities, `no-new-privileges`, default seccomp, and CPU, memory/swap, PID, file-descriptor, timeout, and output limits. JSON over stdin/stdout is the only execution protocol. Docker is the practical free/local choice; stronger hostile multi-tenant deployments should evaluate gVisor or microVM isolation.
 
 ---
 

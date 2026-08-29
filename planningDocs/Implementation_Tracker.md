@@ -5,8 +5,8 @@ This is the working checklist for implementation. We complete and verify each it
 ## Current focus
 
 - **Current phase:** Phase 7.5 — Role-scoped dashboard product
-- **Next step:** Design and implement isolation for Publisher-provided handler execution
-- **Current milestone:** Enrolled agents can fetch assigned handlers through signed URLs, verify and install them locally with explicit execution consent; 140 tests pass
+- **Next step:** Add Admin approval and artifact-signing policy for Publisher handler releases
+- **Current milestone:** Downloaded Publisher handlers execute through ephemeral restricted Docker containers instead of inside the Worker Agent; 143 tests pass
 
 ## Phase 1 — Project foundation
 
@@ -82,7 +82,7 @@ This is the working checklist for implementation. We complete and verify each it
 - [x] Return temporary signed upload URLs for handler artifacts
 - [x] Deliver verified handlers through agent-authorized temporary signed download URLs
 - [x] Revalidate handler digest, size, archive paths, manifest, and entrypoint on the Worker
-- [ ] Define handler isolation and sandboxing requirements
+- [x] Define and implement Docker handler isolation and resource limits
 
 ## Phase 6 — Reliability
 
@@ -189,3 +189,4 @@ This is the working checklist for implementation. We complete and verify each it
 | 2026-08-29 | Verified handler activation added | Added reserved signed uploads, private handler storage, SHA-256 and size checks, ZIP traversal/symlink/zip-bomb defenses, manifest validation, content-addressed immutable promotion, controlled activation, migrations `0010`–`0011`, and real MinIO coverage; all 133 tests pass with no Alembic drift |
 | 2026-08-29 | Per-agent Worker credentials added | Added CSRF-protected one-time enrollments, hashed and expiring agent credentials, automatic rotation, dashboard listing and revocation, exact Worker/Job Type/queue authorization, migration `0012`, runtime token exchange, and impersonation/cross-Publisher coverage; all 135 tests pass |
 | 2026-08-29 | Signed Worker handler delivery added | Added agent-scoped signed downloads, bounded credential-free transfer, local SHA-256 and ZIP/manifest revalidation, temporary installation, exact assignment checks, and explicit opt-in before Publisher code executes; all 140 tests pass |
+| 2026-08-29 | Downloaded handler isolation added | Removed in-process imports of Publisher code and added per-attempt Docker execution with no network or host secrets, read-only mounts/root, non-root identity, dropped capabilities, pinned image, bounded resources/output/time, cleanup, and real container isolation tests; all 143 tests pass |

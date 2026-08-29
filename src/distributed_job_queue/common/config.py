@@ -57,6 +57,12 @@ class Settings:
     handler_download_url_seconds: int
     handler_max_bytes: int
     handler_max_uncompressed_bytes: int
+    handler_sandbox_image: str
+    handler_sandbox_memory_mb: int
+    handler_sandbox_millicpus: int
+    handler_sandbox_pids: int
+    handler_sandbox_timeout_seconds: int
+    handler_sandbox_max_output_bytes: int
     metrics_token: str
     metrics_port: int
     worker_gateway_url: str
@@ -122,6 +128,23 @@ def load_settings() -> Settings:
         ),
         handler_max_uncompressed_bytes=_get_int(
             "HANDLER_MAX_UNCOMPRESSED_BYTES", 50 * 1024 * 1024, minimum=1
+        ),
+        handler_sandbox_image=os.getenv(
+            "HANDLER_SANDBOX_IMAGE",
+            "python:3.12-slim@sha256:09f7da3bc104798d0afb40bc08d23ab2da20a76130cec1f2ef170848f5d85217",
+        ),
+        handler_sandbox_memory_mb=_get_int(
+            "HANDLER_SANDBOX_MEMORY_MB", 256, minimum=32
+        ),
+        handler_sandbox_millicpus=_get_int(
+            "HANDLER_SANDBOX_MILLICPUS", 500, minimum=10
+        ),
+        handler_sandbox_pids=_get_int("HANDLER_SANDBOX_PIDS", 64, minimum=1),
+        handler_sandbox_timeout_seconds=_get_int(
+            "HANDLER_SANDBOX_TIMEOUT_SECONDS", 300, minimum=1
+        ),
+        handler_sandbox_max_output_bytes=_get_int(
+            "HANDLER_SANDBOX_MAX_OUTPUT_BYTES", 1024 * 1024, minimum=1024
         ),
         metrics_token=metrics_token,
         metrics_port=_get_int("METRICS_PORT", 0, minimum=0),

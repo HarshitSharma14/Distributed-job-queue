@@ -331,7 +331,7 @@ Workers communicate only with the gateway using a credential bound to one Worker
 
 After assignment, a worker receives only the required job payload, approved handler metadata, a fenced lease token, and temporary signed artifact URLs when needed. It cannot query databases, modify queues, access unrelated jobs, or call internal services directly.
 
-Detailed credential issuance, token rotation, handler approval, and execution sandboxing are intentionally deferred to a dedicated security design. This document locks only the trust boundary: the platform controls state and infrastructure; workers execute approved workloads.
+The platform controls state and infrastructure; workers execute approved workloads. Credential issuance, rotation, signed handler delivery, and Docker-based execution isolation are defined below. Administrative code approval and artifact-signing policy remain separate controls.
 
 ## Worker endpoints
 
@@ -630,7 +630,7 @@ Heartbeat / claim / renew / finish use agent token
 
 The agent token is checked against the requested Worker ID, exact `job_type_id`, and assigned queue. It cannot impersonate another agent or claim a same-named Job Type from another Publisher. Re-enrollment revokes the previous active credential, and dashboard revocation takes effect immediately.
 
-After registration, the agent may request a short-lived signed download URL for only that Job Type's verified immutable handler. It downloads without storage credentials, checks compressed and uncompressed limits, verifies SHA-256, revalidates archive paths and the manifest, and installs into a temporary directory. Downloaded Python code executes only with explicit operator consent. Structural verification does not replace runtime isolation.
+After registration, the agent may request a short-lived signed download URL for only that Job Type's verified immutable handler. It downloads without storage credentials, checks compressed and uncompressed limits, verifies SHA-256, revalidates archive paths and the manifest, and installs into a temporary directory. Downloaded Python code executes only with explicit operator consent and only through the sandbox described below.
 
 ---
 
@@ -669,7 +669,44 @@ Only `ACTIVE` Job Types accept new jobs. A Publisher reserves an attempt-scoped 
 
 Verified bytes are copied to a content-addressed object key that was never exposed through an upload URL. The Job Type references only this promoted key, so reusing an unexpired upload URL cannot replace active handler code. Successful verification performs the controlled `DRAFT → ACTIVE` transition; rejected artifacts remain auditable and the Job Type stays `DRAFT`.
 
-These checks prove integrity and package structure, not that Publisher code is harmless. Worker delivery now repeats integrity and structure checks and requires explicit execution consent. Signature policy, platform approval, and runtime sandboxing remain separate controls.
+These checks prove integrity and package structure, not that Publisher code is harmless. Worker delivery repeats the checks and requires explicit consent. Docker isolation limits runtime access; signature and administrative approval policy remain separate controls.
+
+---
+
+# 15. How is downloaded handler code isolated?
+
+## Options
+
+### Run inside the Worker Agent process
+
+- **Pro:** fastest and simplest
+- **Con:** Publisher code can read the agent token, environment, files, and process memory
+
+### Run in a plain subprocess
+
+- **Pro:** separates crashes and supports timeouts
+- **Con:** still inherits the host user, filesystem, environment, and network unless heavily constrained
+
+### Run in an ephemeral Docker container
+
+- **Pro:** practical local and free deployment model
+- **Pro:** supports network, filesystem, identity, capability, and resource restrictions
+- **Con:** requires Docker and still shares the host kernel
+
+### Run in a microVM or hardened sandbox
+
+- **Pro:** strongest isolation for hostile multi-tenant code
+- **Con:** significantly higher infrastructure and operational cost
+
+## Decision
+
+### Choose: Ephemeral hardened Docker container per downloaded-handler attempt
+
+The Worker Agent never imports downloaded Python. It registers a local proxy that starts one short-lived container per execution. The payload enters through stdin as JSON and the result leaves through a bounded JSON response. Agent credentials and host environment variables are not passed into the container.
+
+The container uses a digest-pinned Python image, no network, a read-only root filesystem, a read-only handler mount, a non-root user, dropped Linux capabilities, `no-new-privileges`, the default seccomp policy, a restricted temporary filesystem, and CPU, memory/swap, PID, file-descriptor, execution-time, and output limits. Timeout or output-limit violations terminate and remove the container.
+
+This materially limits untrusted code but is not a perfect hostile-code boundary because Docker shares the host kernel. A production multi-tenant service should later consider gVisor, Kata Containers, or Firecracker. Trusted internal handlers may still run in-process from explicitly installed local modules.
 
 ---
 
@@ -694,7 +731,9 @@ Agent downloads directly from private storage
   ↓
 Verify size + SHA-256 + ZIP + manifest
   ↓
-Install temporarily and execute only with explicit consent
+Install temporarily
+  ↓
+Execute each attempt in a restricted ephemeral Docker container
 ```
 
 ## 1. Job submission flow
@@ -852,7 +891,7 @@ Worker Processes
   ├─ communicate only with the Worker Gateway
   ├─ register and heartbeat
   ├─ securely download and revalidate the assigned handler
-  ├─ execute approved handlers
+  ├─ execute downloaded handlers in ephemeral Docker sandboxes
   └─ report lease renewal, completion, or failure
 
 Scheduler / Recovery Monitor
@@ -877,6 +916,7 @@ State:                 PostgreSQL source of truth
 Worker Trust Boundary: No direct database, Redis, or storage access
 Worker Management:     Registration + heartbeats
 Worker Authentication: One-time enrollment + revocable per-agent credential
+Remote Execution:      Ephemeral restricted Docker container per attempt
 Failure Recovery:      Job leases + requeue
 Retries:               Exponential backoff with jitter
 Permanent Failure:     Dead-letter queue

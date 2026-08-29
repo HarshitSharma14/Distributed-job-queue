@@ -96,7 +96,9 @@ job-worker \
 
 An authenticated Worker user creates the short-lived enrollment token for one active Job Type. Registration consumes it once and returns a revocable credential bound to that Worker Agent. The platform—not the worker—selects the Job Type capability and queue. The worker exits if its local bundle does not contain the assigned handler.
 
-For trusted internal code, provide `--handler-module` and omit `--allow-downloaded-handler`. For a generic external agent, the opt-in flag permits the assigned Publisher bundle to execute on that machine. Structural verification does not make arbitrary Python code safe; run remote handlers only in an isolated environment.
+For trusted internal code, provide `--handler-module` and omit `--allow-downloaded-handler`. For a generic external agent, the opt-in flag executes the assigned bundle only through an ephemeral restricted Docker container. The agent itself never imports Publisher code. Docker must be running on the Worker machine.
+
+The sandbox has no network or host environment, uses read-only filesystems and a non-root user, drops capabilities, and enforces CPU, memory, PID, timeout, and output limits. It currently supports Python standard-library handlers; approved dependency images are a future extension. Docker reduces risk but is not equivalent to microVM isolation for fully hostile multi-tenant workloads.
 
 After registration, the worker uses only its agent credential for handler download, heartbeats, claims, lease renewal, result upload, completion, and failure. It cannot act as another worker, claim another queue or Job Type, or access PostgreSQL, Redis, or permanent storage credentials.
 

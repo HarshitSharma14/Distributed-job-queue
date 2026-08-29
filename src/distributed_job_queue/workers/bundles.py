@@ -2,20 +2,18 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import re
 import stat
-import sys
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path, PurePosixPath
 from tempfile import TemporaryDirectory
-from types import ModuleType
 from zipfile import BadZipFile, ZipFile, is_zipfile
 
 from distributed_job_queue.workers.gateway_client import DownloadedHandlerBundle
 from distributed_job_queue.workers.handlers import HandlerRegistry
+from distributed_job_queue.workers.sandbox import DockerHandlerSandbox
 
 
 class InvalidDownloadedHandler(ValueError):
@@ -27,11 +25,8 @@ class InstalledHandlerBundle:
     """Own the temporary files for one loaded handler until worker shutdown."""
 
     _directory: TemporaryDirectory[str]
-    _module_name: str
-    _module: ModuleType
 
     def close(self) -> None:
-        sys.modules.pop(self._module_name, None)
         self._directory.cleanup()
 
 
@@ -40,8 +35,9 @@ def install_downloaded_handler(
     bundle: DownloadedHandlerBundle,
     *,
     max_uncompressed_bytes: int,
+    sandbox: DockerHandlerSandbox,
 ) -> InstalledHandlerBundle:
-    """Validate, extract, import, and register one opted-in remote handler."""
+    """Validate and register a proxy that executes only inside the sandbox."""
 
     manifest, archive = _inspect_archive(
         bundle.content,
@@ -50,6 +46,7 @@ def install_downloaded_handler(
     )
     directory = TemporaryDirectory(prefix="djq-handler-")
     root = Path(directory.name)
+    root.chmod(0o755)
     try:
         with archive:
             for entry in archive.infolist():
@@ -57,26 +54,18 @@ def install_downloaded_handler(
                     continue
                 destination = root.joinpath(*PurePosixPath(entry.filename).parts)
                 destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.parent.chmod(0o755)
                 destination.write_bytes(archive.read(entry))
+                destination.chmod(0o644)
 
-        module_name, callable_name = manifest["entrypoint"].split(":", 1)
-        module_path = root / (module_name.replace(".", "/") + ".py")
-        synthetic_name = f"_djq_handler_{bundle.digest}"
-        specification = importlib.util.spec_from_file_location(
-            synthetic_name, module_path
-        )
-        if specification is None or specification.loader is None:
-            raise InvalidDownloadedHandler("Handler entrypoint cannot be loaded")
-        module = importlib.util.module_from_spec(specification)
-        sys.modules[synthetic_name] = module
-        specification.loader.exec_module(module)
-        handler = getattr(module, callable_name, None)
-        if not callable(handler):
-            raise InvalidDownloadedHandler("Handler entrypoint is not callable")
-        registry.register(bundle.job_type, handler)
-        return InstalledHandlerBundle(directory, synthetic_name, module)
+        entrypoint = manifest["entrypoint"]
+
+        def isolated_handler(payload: dict) -> object:
+            return sandbox.execute(root, entrypoint, payload)
+
+        registry.register(bundle.job_type, isolated_handler)
+        return InstalledHandlerBundle(directory)
     except Exception:
-        sys.modules.pop(f"_djq_handler_{bundle.digest}", None)
         directory.cleanup()
         raise
 

@@ -14,6 +14,7 @@ from distributed_job_queue.workers.consumer import WorkerConsumer
 from distributed_job_queue.workers.bundles import InstalledHandlerBundle, install_downloaded_handler
 from distributed_job_queue.workers.executor import LeaseLost, WorkerExecutor
 from distributed_job_queue.workers.gateway_client import WorkerGatewayClient
+from distributed_job_queue.workers.sandbox import DockerHandlerSandbox
 from distributed_job_queue.workers.handlers import (
     HandlerRegistry,
     UnknownJobHandler,
@@ -193,10 +194,19 @@ def main() -> None:
                 or downloaded.job_type not in unsupported
             ):
                 raise SystemExit("Gateway returned an unexpected handler assignment")
+            sandbox = DockerHandlerSandbox(
+                image=settings.handler_sandbox_image,
+                memory_mb=settings.handler_sandbox_memory_mb,
+                millicpus=settings.handler_sandbox_millicpus,
+                pids_limit=settings.handler_sandbox_pids,
+                timeout_seconds=settings.handler_sandbox_timeout_seconds,
+                max_output_bytes=settings.handler_sandbox_max_output_bytes,
+            )
             installed_bundle = install_downloaded_handler(
                 registry,
                 downloaded,
                 max_uncompressed_bytes=settings.handler_max_uncompressed_bytes,
+                sandbox=sandbox,
             )
             unsupported = set(registration.capabilities) - set(registry.job_types())
         if unsupported:

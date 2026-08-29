@@ -25,6 +25,12 @@ def test_load_settings_uses_development_defaults():
     assert settings.handler_download_url_seconds == 300
     assert settings.handler_max_bytes == 10 * 1024 * 1024
     assert settings.handler_max_uncompressed_bytes == 50 * 1024 * 1024
+    assert settings.handler_sandbox_image.startswith("python:3.12-slim@sha256:")
+    assert settings.handler_sandbox_memory_mb == 256
+    assert settings.handler_sandbox_millicpus == 500
+    assert settings.handler_sandbox_pids == 64
+    assert settings.handler_sandbox_timeout_seconds == 300
+    assert settings.handler_sandbox_max_output_bytes == 1024 * 1024
     assert settings.metrics_token == "dev-metrics-token"
     assert settings.metrics_port == 0
     assert settings.max_attempts == 5
@@ -56,6 +62,12 @@ def test_load_settings_parses_environment_values(monkeypatch):
     monkeypatch.setenv("HANDLER_DOWNLOAD_URL_SECONDS", "90")
     monkeypatch.setenv("HANDLER_MAX_BYTES", "2048")
     monkeypatch.setenv("HANDLER_MAX_UNCOMPRESSED_BYTES", "8192")
+    monkeypatch.setenv("HANDLER_SANDBOX_IMAGE", "python@sha256:test")
+    monkeypatch.setenv("HANDLER_SANDBOX_MEMORY_MB", "128")
+    monkeypatch.setenv("HANDLER_SANDBOX_MILLICPUS", "250")
+    monkeypatch.setenv("HANDLER_SANDBOX_PIDS", "32")
+    monkeypatch.setenv("HANDLER_SANDBOX_TIMEOUT_SECONDS", "45")
+    monkeypatch.setenv("HANDLER_SANDBOX_MAX_OUTPUT_BYTES", "4096")
     monkeypatch.setenv("MAX_ATTEMPTS", "3")
     monkeypatch.setenv("SCHEDULER_BATCH_SIZE", "25")
     monkeypatch.setenv("SCHEDULER_POLL_INTERVAL_SECONDS", "2")
@@ -83,6 +95,12 @@ def test_load_settings_parses_environment_values(monkeypatch):
     assert settings.handler_download_url_seconds == 90
     assert settings.handler_max_bytes == 2048
     assert settings.handler_max_uncompressed_bytes == 8192
+    assert settings.handler_sandbox_image == "python@sha256:test"
+    assert settings.handler_sandbox_memory_mb == 128
+    assert settings.handler_sandbox_millicpus == 250
+    assert settings.handler_sandbox_pids == 32
+    assert settings.handler_sandbox_timeout_seconds == 45
+    assert settings.handler_sandbox_max_output_bytes == 4096
     assert settings.max_attempts == 3
     assert settings.scheduler_batch_size == 25
     assert settings.scheduler_poll_interval_seconds == 2
