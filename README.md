@@ -167,6 +167,24 @@ curl http://localhost:8000/jobs/<job_id> \
   -H "Authorization: Bearer ${PRODUCER_API_KEY}"
 ```
 
+## Publisher dashboard data
+
+An authenticated Publisher browser session can list only jobs created from its Job Types:
+
+```text
+GET /publisher/jobs?status=RUNNING&job_type_id=<uuid>&limit=50
+```
+
+The response contains lightweight summaries and an opaque `next_cursor`. Pass that cursor to fetch the next stable page. Use `GET /jobs/{job_id}` for the complete payload, result, error, and attempt history.
+
+Exact Publisher analytics are available from:
+
+```text
+GET /publisher/analytics?job_type_id=<uuid>&created_after=<timestamp>
+```
+
+These totals come from PostgreSQL and include status counts, attempts, terminal success rate, completion latency, and per-version Job Type breakdowns. Both endpoints always enforce the logged-in Publisher's ownership.
+
 ## Operational metrics
 
 The API exposes a private Prometheus endpoint using a separate token:

@@ -579,6 +579,10 @@ PostgreSQL enforces that the referenced Job Type belongs to the recorded Publish
 
 Publisher and Producer totals come from PostgreSQL because they require exact ownership filtering. Prometheus remains a low-cardinality operational source. The Dashboard API combines these sources and applies authorization; browsers never query PostgreSQL, Redis, or Prometheus directly.
 
+The Publisher dashboard uses `GET /publisher/jobs` for keyset-paginated job summaries and `GET /publisher/analytics` for exact totals. Both queries always begin with the authenticated `publisher_id` and optionally narrow by status, Job Type, Producer, and creation window. Analytics include lifecycle counts, attempts, terminal success rate, completion latency, and per-version Job Type breakdowns. Full payload, result, error, and attempt history remain available through the ownership-checked `GET /jobs/{job_id}` endpoint.
+
+Publisher pagination orders by `(created_at, job_id)` descending and carries that boundary in an opaque cursor. PostgreSQL indexes Publisher/time and Publisher/status access paths. This avoids increasingly expensive offsets and prevents another Publisher's rows from entering either list or aggregate results.
+
 Worker payload access is temporary and assignment-scoped through the Worker Gateway. The dashboard shows safe job metadata and the worker's own execution record. Retaining payload or result access after execution requires an explicit job-type policy.
 
 ---

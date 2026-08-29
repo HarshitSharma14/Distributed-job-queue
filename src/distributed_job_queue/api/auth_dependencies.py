@@ -126,6 +126,18 @@ def require_publisher_principal(
     return principal
 
 
+def require_publisher_dashboard_principal(
+    principal: Annotated[AuthenticatedPrincipal, Depends(require_current_principal)],
+) -> AuthenticatedPrincipal:
+    if UserRole.PUBLISHER not in principal.roles:
+        raise APIError(
+            status_code=status.HTTP_403_FORBIDDEN,
+            code="PUBLISHER_ROLE_REQUIRED",
+            message="Publisher role required",
+        )
+    return principal
+
+
 def require_publisher_write_principal(
     request: Request,
     principal: Annotated[AuthenticatedPrincipal, Depends(require_publisher_principal)],

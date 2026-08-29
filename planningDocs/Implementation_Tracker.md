@@ -5,8 +5,8 @@ This is the working checklist for implementation. We complete and verify each it
 ## Current focus
 
 - **Current phase:** Phase 7.5 — Role-scoped dashboard product
-- **Next step:** Add Publisher-scoped job listing and analytics APIs
-- **Current milestone:** Publishers can create a clean immutable successor from the latest released Job Type while preserving a linear, auditable version chain; all 152 tests pass with no Alembic drift
+- **Next step:** Add Producer-scoped job listing and analytics APIs
+- **Current milestone:** Publishers have ownership-scoped, cursor-paginated job summaries and exact PostgreSQL lifecycle analytics with Job Type, Producer, status, and time filters; all 155 tests pass with no Alembic drift
 
 ## Phase 1 — Project foundation
 
@@ -117,8 +117,9 @@ This is the working checklist for implementation. We complete and verify each it
 - [x] Add handler-artifact upload, integrity/structure verification, and immutable promotion
 - [x] Add Admin approval/rejection, release audit data, and signed activation
 - [x] Add new immutable Job Type version creation
-- [ ] Add publisher-scoped job and analytics APIs
-- [ ] Add producer-scoped job detail and history APIs
+- [x] Add publisher-scoped job and analytics APIs
+- [x] Add producer-scoped job detail and attempt-history API
+- [ ] Add producer-scoped job listing and analytics APIs
 - [ ] Add worker-scoped assignment and attempt-history APIs
 - [ ] Add global Admin job, worker, queue, and dead-letter APIs
 - [ ] Combine PostgreSQL analytics with Prometheus trends
@@ -195,3 +196,4 @@ This is the working checklist for implementation. We complete and verify each it
 | 2026-08-29 | Downloaded handler isolation added | Removed in-process imports of Publisher code and added per-attempt Docker execution with no network or host secrets, read-only mounts/root, non-root identity, dropped capabilities, pinned image, bounded resources/output/time, cleanup, and real container isolation tests; all 143 tests pass |
 | 2026-08-29 | Signed Admin handler approval added | Added `PENDING_APPROVAL`, Admin-only approval/rejection with audit fields, Ed25519 release signatures bound to Job Type identity/version/digest, worker trusted-key verification, key-generation CLI, migration `0013`, and fail-closed coverage; all 149 tests pass with no Alembic drift |
 | 2026-08-29 | Immutable Job Type version creation added | Added Publisher-owned next-version creation, inherited or explicit queue selection, clean draft releases, unique predecessor lineage, stale/unreleased source rejection, migration `0014`, and ownership plus concurrency coverage; all 152 tests pass with no Alembic drift |
+| 2026-08-29 | Publisher dashboard data APIs added | Added strict Publisher-session authorization, cursor-paginated job summaries, status/Job Type/Producer/time filters, exact lifecycle and attempt aggregates, per-version breakdowns, terminal success and completion latency, query indexes in migration `0015`, and cross-Publisher isolation coverage; all 155 tests pass with no Alembic drift |

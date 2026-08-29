@@ -71,6 +71,8 @@ Job claiming, state changes, and attempt creation require correctness and transa
 
 PostgreSQL also enforces immutable Job Type release history with unique `(publisher_id, name, version)` values and a unique self-referencing `supersedes_job_type_id`. The API locks the latest family row before creating the next draft, while database constraints reject concurrent branches.
 
+Publisher dashboard totals are computed directly in PostgreSQL under a mandatory `publisher_id` predicate. Composite Publisher/time and Publisher/status indexes support keyset pagination, filters, and grouped lifecycle counts. Prometheus remains reserved for operational trends and is never queried directly by a browser.
+
 ---
 
 # 3. Queue Technology

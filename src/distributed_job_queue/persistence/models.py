@@ -11,6 +11,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
+    Index,
     Integer,
     String,
     Text,
@@ -255,6 +256,8 @@ class HandlerArtifact(Base):
 class Job(Base):
     __tablename__ = "jobs"
     __table_args__ = (
+        Index("ix_jobs_publisher_created_id", "publisher_id", "created_at", "id"),
+        Index("ix_jobs_publisher_status", "publisher_id", "status"),
         UniqueConstraint(
             "producer_id", "idempotency_key", name="uq_jobs_producer_idempotency_key"
         ),
