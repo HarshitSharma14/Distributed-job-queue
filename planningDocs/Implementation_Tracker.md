@@ -5,8 +5,8 @@ This is the working checklist for implementation. We complete and verify each it
 ## Current focus
 
 - **Current phase:** Phase 7.5 — Role-scoped dashboard product
-- **Next step:** Add global Admin job, worker, queue, and dead-letter APIs
-- **Current milestone:** Worker users can inspect active assignments and cursor-paginated attempt history across only their owned agents without receiving payloads, results, leases, or credentials; all 161 tests pass with no Alembic drift
+- **Next step:** Combine PostgreSQL dashboard analytics with Prometheus operational trends
+- **Current milestone:** Admin has global jobs, exact analytics, Worker health, PostgreSQL/Redis queue state, and dead-letter visibility without access to recoverable secrets; all 166 tests pass with no Alembic drift
 
 ## Phase 1 — Project foundation
 
@@ -102,7 +102,7 @@ This is the working checklist for implementation. We complete and verify each it
 - [x] Store result references in PostgreSQL
 - [x] Add structured logs
 - [x] Add queue, worker, retry, and failure metrics
-- [ ] Add job and worker status views
+- [x] Add job and worker status APIs
 
 ## Phase 7.5 — Role-scoped dashboard product
 
@@ -111,7 +111,7 @@ This is the working checklist for implementation. We complete and verify each it
 - [x] Add human authentication and authenticated request identity
 - [x] Add Producer API keys
 - [x] Apply role and ownership authorization to job submission and detail APIs
-- [ ] Apply role and ownership authorization to remaining product APIs
+- [x] Apply role and ownership authorization to remaining product APIs
 - [x] Replace the shared Worker Gateway token with per-agent credentials
 - [x] Add Publisher Job Type creation, listing, detail, and disable APIs
 - [x] Add handler-artifact upload, integrity/structure verification, and immutable promotion
@@ -121,7 +121,7 @@ This is the working checklist for implementation. We complete and verify each it
 - [x] Add producer-scoped job detail and attempt-history API
 - [x] Add producer-scoped job listing and analytics APIs
 - [x] Add worker-scoped assignment and attempt-history APIs
-- [ ] Add global Admin job, worker, queue, and dead-letter APIs
+- [x] Add global Admin job, worker, queue, and dead-letter APIs
 - [ ] Combine PostgreSQL analytics with Prometheus trends
 - [ ] Build Admin, Publisher, Producer, and Worker dashboard pages
 
@@ -199,3 +199,4 @@ This is the working checklist for implementation. We complete and verify each it
 | 2026-08-29 | Publisher dashboard data APIs added | Added strict Publisher-session authorization, cursor-paginated job summaries, status/Job Type/Producer/time filters, exact lifecycle and attempt aggregates, per-version breakdowns, terminal success and completion latency, query indexes in migration `0015`, and cross-Publisher isolation coverage; all 155 tests pass with no Alembic drift |
 | 2026-08-29 | Producer dashboard data APIs added | Generalized dashboard queries across ownership types; added Producer job lists, exact analytics, Publisher/Job Type/status/time filters, scoped browser and API-key access, Producer indexes in migration `0016`, and cross-Producer isolation coverage; all 158 tests pass with no Alembic drift |
 | 2026-08-30 | Worker dashboard data APIs added | Added owned active assignments, cursor-paginated attempt history, agent/Job Type/status/time filters, safe outcome/error/duration details, strict payload/result/token exclusion, Worker indexes in migration `0017`, and cross-owner isolation coverage; all 161 tests pass with no Alembic drift |
+| 2026-08-30 | Admin control-plane data APIs added | Added global cursor-paginated jobs, exact analytics, Worker ownership/health/activity, durable PostgreSQL plus temporary Redis queue state, graceful Redis degradation, dedicated dead-letter visibility, Admin-only authorization, safe redaction, and migration `0018` query indexes; all 166 tests pass with no Alembic drift |

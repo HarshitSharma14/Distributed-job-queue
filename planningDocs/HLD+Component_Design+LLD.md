@@ -587,6 +587,10 @@ The Worker dashboard uses `GET /worker-management/assignments` for current work 
 
 Worker dashboard records intentionally omit payloads, results, lease tokens, and credentials. Active execution payloads remain available only to the assigned agent through its fenced Worker Gateway lease. Historical views expose safe job metadata, outcomes, errors, and durations.
 
+The Admin control plane uses `GET /admin/jobs`, `/admin/analytics`, `/admin/workers`, `/admin/queues`, and `/admin/dead-letters`. Admin job filters span Publisher, Producer, Job Type, queue, status, and time. Worker views include ownership, capabilities, health, heartbeat, and active-job counts. Dead-letter summaries link to the existing full job-detail endpoint.
+
+Admin queue state intentionally shows two layers together: PostgreSQL lifecycle counts as durable truth, and Redis ready/in-flight counts as temporary delivery state. Redis failure does not erase the PostgreSQL view; unavailable Redis fields are returned as unknown. Admin visibility still excludes password hashes, bearer credentials, signing secrets, infrastructure credentials, signed URLs, and lease tokens.
+
 Dashboard pagination uses descending timestamp/ID keysets carried in opaque cursors. PostgreSQL indexes Publisher, Producer, Worker assignment, and Worker attempt access paths. This avoids increasingly expensive offsets and prevents another user's rows from entering either list or aggregate results.
 
 Worker payload access is temporary and assignment-scoped through the Worker Gateway. The dashboard shows safe job metadata and the worker's own execution record. Retaining payload or result access after execution requires an explicit job-type policy.

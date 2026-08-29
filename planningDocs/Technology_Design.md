@@ -77,6 +77,8 @@ Producer dashboard queries reuse the same service and repository contracts under
 
 Worker dashboard queries join jobs and attempts through `workers.owner_user_id`. Composite Worker/status and Worker/attempt-time indexes support active assignments and cursor-paginated history. Active assignment order uses the current attempt's immutable start time rather than lease-renewal timestamps.
 
+Admin dashboard reads reuse PostgreSQL aggregate and keyset-pagination services without an ownership restriction only after an Admin browser session is verified. Global status/time, queue/status, and Worker status/time indexes support operational lists. Queue views merge PostgreSQL aggregates with Redis ready and in-flight cardinalities while keeping both sources clearly labeled.
+
 ---
 
 # 3. Queue Technology

@@ -261,6 +261,8 @@ class Job(Base):
         Index("ix_jobs_producer_created_id", "producer_id", "created_at", "id"),
         Index("ix_jobs_producer_status", "producer_id", "status"),
         Index("ix_jobs_worker_status", "worker_id", "status"),
+        Index("ix_jobs_status_created_id", "status", "created_at", "id"),
+        Index("ix_jobs_queue_status", "queue", "status"),
         UniqueConstraint(
             "producer_id", "idempotency_key", name="uq_jobs_producer_idempotency_key"
         ),
@@ -333,6 +335,9 @@ class Job(Base):
 
 class Worker(Base):
     __tablename__ = "workers"
+    __table_args__ = (
+        Index("ix_workers_status_registered_id", "status", "registered_at", "id"),
+    )
 
     id: Mapped[str] = mapped_column(String(100), primary_key=True)
     owner_user_id: Mapped[str] = mapped_column(

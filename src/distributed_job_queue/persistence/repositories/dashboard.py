@@ -20,7 +20,7 @@ class JobCursor:
     job_id: str
 
 
-DashboardOwner = Literal["publisher", "producer"]
+DashboardOwner = Literal["admin", "publisher", "producer"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,6 +29,7 @@ class DashboardJobFilters:
     job_type_id: str | None = None
     publisher_id: str | None = None
     producer_id: str | None = None
+    queue: str | None = None
     created_after: datetime | None = None
     created_before: datetime | None = None
 
@@ -141,12 +142,11 @@ class DashboardRepository:
         owner_id: str,
         filters: DashboardJobFilters,
     ) -> list[ColumnElement[bool]]:
-        ownership = (
-            Job.publisher_id == owner_id
-            if owner == "publisher"
-            else Job.producer_id == owner_id
-        )
-        conditions: list[ColumnElement[bool]] = [ownership]
+        conditions: list[ColumnElement[bool]] = []
+        if owner == "publisher":
+            conditions.append(Job.publisher_id == owner_id)
+        elif owner == "producer":
+            conditions.append(Job.producer_id == owner_id)
         if filters.status is not None:
             conditions.append(Job.status == filters.status.value)
         if filters.job_type_id is not None:
@@ -155,6 +155,8 @@ class DashboardRepository:
             conditions.append(Job.publisher_id == filters.publisher_id)
         if filters.producer_id is not None:
             conditions.append(Job.producer_id == filters.producer_id)
+        if filters.queue is not None:
+            conditions.append(Job.queue == filters.queue)
         if filters.created_after is not None:
             conditions.append(Job.created_at >= filters.created_after)
         if filters.created_before is not None:

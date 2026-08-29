@@ -215,6 +215,22 @@ GET /worker-management/attempts?status=FAILED&job_type_id=<uuid>&limit=50
 
 These dashboard routes expose safe assignment metadata, attempt outcomes, errors, and durations. They never return job payloads, result references, lease tokens, Worker credentials, or another user's agents. Execution payloads remain available only to the assigned Worker Agent through the Worker Gateway.
 
+## Admin control-plane data
+
+An authenticated Admin browser session can access:
+
+```text
+GET /admin/jobs
+GET /admin/analytics
+GET /admin/workers
+GET /admin/queues
+GET /admin/dead-letters
+```
+
+Admin jobs support Publisher, Producer, Job Type, queue, status, time, and cursor filters. Worker records include owner, capabilities, health, heartbeat, and active-job count. Queue records show PostgreSQL lifecycle totals separately from Redis ready and in-flight depth. Dead-letter summaries link to `GET /jobs/{job_id}` for complete payload, result, error, and attempt history.
+
+Admin responses still never reveal passwords, bearer tokens, credential hashes, signing secrets, signed URLs, infrastructure credentials, or lease tokens.
+
 ## Operational metrics
 
 The API exposes a private Prometheus endpoint using a separate token:
