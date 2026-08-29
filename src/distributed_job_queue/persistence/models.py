@@ -153,6 +153,9 @@ class JobType(Base):
             "publisher_id", "name", "version", name="uq_job_types_publisher_name_version"
         ),
         UniqueConstraint("id", "publisher_id", name="uq_job_types_id_publisher"),
+        UniqueConstraint(
+            "supersedes_job_type_id", name="uq_job_types_supersedes_job_type_id"
+        ),
     )
 
     id: Mapped[str] = mapped_column(
@@ -173,6 +176,9 @@ class JobType(Base):
         String(100), nullable=True
     )
     handler_release_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
+    supersedes_job_type_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("job_types.id"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

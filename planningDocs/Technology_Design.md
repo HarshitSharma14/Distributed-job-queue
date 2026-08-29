@@ -69,6 +69,8 @@ The database stores jobs, workers, attempts, and execution history.
 
 Job claiming, state changes, and attempt creation require correctness and transactions.
 
+PostgreSQL also enforces immutable Job Type release history with unique `(publisher_id, name, version)` values and a unique self-referencing `supersedes_job_type_id`. The API locks the latest family row before creating the next draft, while database constraints reject concurrent branches.
+
 ---
 
 # 3. Queue Technology

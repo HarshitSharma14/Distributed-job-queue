@@ -15,6 +15,14 @@ class JobTypeCreateRequest(BaseModel):
     queue: str = Field(min_length=1, max_length=100, pattern=NAME_PATTERN)
 
 
+class JobTypeVersionCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    queue: str | None = Field(
+        default=None, min_length=1, max_length=100, pattern=NAME_PATTERN
+    )
+
+
 class JobTypeResponse(BaseModel):
     job_type_id: str
     publisher_id: str
@@ -26,6 +34,7 @@ class JobTypeResponse(BaseModel):
     handler_digest: str | None
     handler_signing_key_id: str | None
     handler_release_signature: str | None
+    supersedes_job_type_id: str | None
     created_at: datetime
     updated_at: datetime
 

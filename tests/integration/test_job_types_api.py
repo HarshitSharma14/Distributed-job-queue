@@ -18,7 +18,7 @@ from distributed_job_queue.api.dependencies import get_session
 from distributed_job_queue.auth.security import CSRF_COOKIE_NAME, CSRF_HEADER_NAME, hash_password
 from distributed_job_queue.auth.handler_signing import parse_trusted_public_keys, verify_release
 from distributed_job_queue.common.config import load_settings
-from distributed_job_queue.domain.identity import UserRole
+from distributed_job_queue.domain.identity import JobTypeStatus, UserRole
 from distributed_job_queue.persistence.database import engine
 from distributed_job_queue.persistence.models import HandlerArtifact, JobType, User
 from distributed_job_queue.persistence.repositories import IdentityRepository
@@ -143,6 +143,7 @@ def test_publisher_creates_lists_reads_and_disables_draft(job_type_context):
             assert body["publisher_id"] == job_type_context.publisher.id
             assert body["status"] == "DRAFT"
             assert body["version"] == 1
+            assert body["supersedes_job_type_id"] is None
             assert body["handler_ref"] is None
 
             duplicate = await client.post(
@@ -271,6 +272,106 @@ def test_publisher_creates_lists_reads_and_disables_draft(job_type_context):
             )
             assert disabled.status_code == 200
             assert disabled.json()["status"] == "DISABLED"
+
+    asyncio.run(scenario())
+
+
+def test_publisher_creates_an_immutable_next_job_type_version(job_type_context):
+    source = IdentityRepository(job_type_context.session).create_job_type(
+        publisher_id=job_type_context.publisher.id,
+        name="versioned_report",
+        version=1,
+        queue="reports",
+        handler_ref="verified/version-1.zip",
+        handler_digest="a" * 64,
+        handler_signing_key_id="integration-key",
+        handler_release_signature="signed-version-1",
+        status=JobTypeStatus.ACTIVE,
+    )
+
+    async def scenario():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://testserver",
+        ) as client:
+            csrf_token = await login(client, job_type_context.publisher)
+            created = await client.post(
+                f"/job-types/{source.id}/versions",
+                headers={CSRF_HEADER_NAME: csrf_token},
+                json={"queue": "reports-v2"},
+            )
+            assert created.status_code == 201
+            body = created.json()
+            assert body["publisher_id"] == source.publisher_id
+            assert body["name"] == source.name
+            assert body["version"] == 2
+            assert body["queue"] == "reports-v2"
+            assert body["status"] == "DRAFT"
+            assert body["supersedes_job_type_id"] == source.id
+            assert body["handler_ref"] is None
+            assert body["handler_digest"] is None
+            assert body["handler_signing_key_id"] is None
+            assert body["handler_release_signature"] is None
+
+            stale_source = await client.post(
+                f"/job-types/{source.id}/versions",
+                headers={CSRF_HEADER_NAME: csrf_token},
+                json={},
+            )
+            assert stale_source.status_code == 409
+            assert stale_source.json()["error"]["code"] == "JOB_TYPE_STATE_CONFLICT"
+
+            unreleased_source = await client.post(
+                f"/job-types/{body['job_type_id']}/versions",
+                headers={CSRF_HEADER_NAME: csrf_token},
+                json={},
+            )
+            assert unreleased_source.status_code == 409
+
+        job_type_context.session.expire_all()
+        unchanged_source = job_type_context.session.get(JobType, source.id)
+        assert unchanged_source.status == JobTypeStatus.ACTIVE.value
+        assert unchanged_source.handler_ref == "verified/version-1.zip"
+
+    asyncio.run(scenario())
+
+
+def test_job_type_version_creation_is_owner_scoped_and_inherits_queue(
+    job_type_context,
+):
+    source = IdentityRepository(job_type_context.session).create_job_type(
+        publisher_id=job_type_context.publisher.id,
+        name="owned_version",
+        queue="original-queue",
+        status=JobTypeStatus.DISABLED,
+    )
+
+    async def scenario():
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://testserver"
+        ) as other_client:
+            other_csrf = await login(
+                other_client, job_type_context.other_publisher
+            )
+            hidden = await other_client.post(
+                f"/job-types/{source.id}/versions",
+                headers={CSRF_HEADER_NAME: other_csrf},
+                json={},
+            )
+            assert hidden.status_code == 404
+
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://testserver"
+        ) as owner_client:
+            owner_csrf = await login(owner_client, job_type_context.publisher)
+            created = await owner_client.post(
+                f"/job-types/{source.id}/versions",
+                headers={CSRF_HEADER_NAME: owner_csrf},
+                json={},
+            )
+            assert created.status_code == 201
+            assert created.json()["queue"] == "original-queue"
 
     asyncio.run(scenario())
 

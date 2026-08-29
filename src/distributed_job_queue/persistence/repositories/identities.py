@@ -66,6 +66,7 @@ class IdentityRepository:
         handler_digest: str | None = None,
         handler_signing_key_id: str | None = None,
         handler_release_signature: str | None = None,
+        supersedes_job_type_id: str | None = None,
         status: JobTypeStatus = JobTypeStatus.ACTIVE,
     ) -> JobType:
         job_type = JobType(
@@ -78,6 +79,7 @@ class IdentityRepository:
             handler_digest=handler_digest,
             handler_signing_key_id=handler_signing_key_id,
             handler_release_signature=handler_release_signature,
+            supersedes_job_type_id=supersedes_job_type_id,
         )
         self.session.add(job_type)
         self.session.flush()
@@ -87,6 +89,26 @@ class IdentityRepository:
         self, job_type_id: str, *, for_update: bool = False
     ) -> JobType | None:
         statement = select(JobType).where(JobType.id == job_type_id)
+        if for_update:
+            statement = statement.with_for_update()
+        return self.session.scalars(statement).one_or_none()
+
+    def get_latest_job_type_version(
+        self,
+        *,
+        publisher_id: str,
+        name: str,
+        for_update: bool = False,
+    ) -> JobType | None:
+        statement = (
+            select(JobType)
+            .where(
+                JobType.publisher_id == publisher_id,
+                JobType.name == name,
+            )
+            .order_by(JobType.version.desc())
+            .limit(1)
+        )
         if for_update:
             statement = statement.with_for_update()
         return self.session.scalars(statement).one_or_none()

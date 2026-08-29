@@ -20,6 +20,7 @@ from distributed_job_queue.api.job_type_schemas import (
     HandlerRejectionRequest,
     JobTypeCreateRequest,
     JobTypeResponse,
+    JobTypeVersionCreateRequest,
 )
 from distributed_job_queue.api.job_type_services import (
     HandlerArtifactNotReady,
@@ -28,6 +29,7 @@ from distributed_job_queue.api.job_type_services import (
     JobTypeConflict,
     JobTypeStateConflict,
     create_draft_job_type,
+    create_next_job_type_version,
     disable_visible_job_type,
     get_visible_job_type,
     list_visible_job_types,
@@ -71,6 +73,43 @@ def create_job_type(
             code="JOB_TYPE_CONFLICT",
             message=str(exc),
         ) from exc
+    return _response(job_type)
+
+
+@router.post(
+    "/{job_type_id}/versions",
+    response_model=JobTypeResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_job_type_version(
+    job_type_id: UUID,
+    request: JobTypeVersionCreateRequest,
+    principal: Annotated[
+        AuthenticatedPrincipal, Depends(require_publisher_write_principal)
+    ],
+    session: Annotated[Session, Depends(get_session)],
+) -> JobTypeResponse:
+    try:
+        job_type = create_next_job_type_version(
+            session,
+            str(job_type_id),
+            publisher_id=principal.user_id,
+            queue=request.queue,
+        )
+    except JobTypeConflict as exc:
+        raise APIError(
+            status_code=status.HTTP_409_CONFLICT,
+            code="JOB_TYPE_CONFLICT",
+            message=str(exc),
+        ) from exc
+    except JobTypeStateConflict as exc:
+        raise APIError(
+            status_code=status.HTTP_409_CONFLICT,
+            code="JOB_TYPE_STATE_CONFLICT",
+            message=str(exc),
+        ) from exc
+    if job_type is None:
+        raise _not_found()
     return _response(job_type)
 
 
@@ -280,6 +319,7 @@ def _response(job_type: JobType) -> JobTypeResponse:
         handler_digest=job_type.handler_digest,
         handler_signing_key_id=job_type.handler_signing_key_id,
         handler_release_signature=job_type.handler_release_signature,
+        supersedes_job_type_id=job_type.supersedes_job_type_id,
         created_at=job_type.created_at,
         updated_at=job_type.updated_at,
     )

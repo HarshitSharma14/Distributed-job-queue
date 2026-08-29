@@ -42,7 +42,7 @@ Main application package. Production code lives here.
 
 ### `api/`
 
-FastAPI application and process runner. Authentication routes expose human sessions and Producer API keys. Job Type routes own Publisher definitions, bundle verification, and Admin-only signed approval or rejection. Worker management routes issue one-time enrollments and list or revoke owned agents. `dependencies.py` authenticates registrations and per-agent requests without holding a database connection during long polling. Worker Gateway routes expose registration, heartbeat, claim, renewal, result upload, completion, and failure. Services own state changes; routes own HTTP validation and authorization boundaries.
+FastAPI application and process runner. Authentication routes expose human sessions and Producer API keys. Job Type routes own Publisher definitions, immutable successor creation, bundle verification, and Admin-only signed approval or rejection. Worker management routes issue one-time enrollments and list or revoke owned agents. `dependencies.py` authenticates registrations and per-agent requests without holding a database connection during long polling. Worker Gateway routes expose registration, heartbeat, claim, renewal, result upload, completion, and failure. Services own state changes; routes own HTTP validation and authorization boundaries.
 
 ### `auth/`
 
@@ -54,7 +54,7 @@ Core concepts and rules: job entities, statuses, state transitions, user roles, 
 
 ### `persistence/`
 
-SQLAlchemy models, database sessions, migrations, and repositories for users, roles, browser sessions, Producer credentials, Worker enrollments and credentials, Job Types, handler approval audits and signatures, jobs, attempts, workers, results, and dead letters. Job rows retain immutable ownership snapshots. Worker credentials link an owned agent to the exact enrolled Job Type. Producer idempotency and Publisher ownership are enforced by PostgreSQL.
+SQLAlchemy models, database sessions, migrations, and repositories for users, roles, browser sessions, Producer credentials, Worker enrollments and credentials, versioned Job Types with linear predecessor links, handler approval audits and signatures, jobs, attempts, workers, results, and dead letters. Job rows retain immutable ownership snapshots. Worker credentials link an owned agent to the exact enrolled Job Type. Producer idempotency and Publisher ownership are enforced by PostgreSQL.
 
 ### `queueing/`
 

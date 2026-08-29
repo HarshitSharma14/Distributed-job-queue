@@ -672,6 +672,10 @@ Only `ACTIVE` Job Types accept new jobs. A Publisher reserves an attempt-scoped 
 
 Verified bytes are copied to a content-addressed object key that was never exposed through an upload URL. Verification moves the Job Type from `DRAFT` to `PENDING_APPROVAL`, but does not attach the release to the active Job Type. Admin approval signs and attaches that exact immutable release, then performs `PENDING_APPROVAL → ACTIVE`. Admin rejection records who rejected it and why, then returns the Job Type to `DRAFT` so the Publisher can upload a replacement.
 
+To change an existing definition, its Publisher calls `POST /job-types/{job_type_id}/versions` on the latest `ACTIVE` or `DISABLED` release. The platform creates a new row with the same Publisher and name, increments the version, links it through `supersedes_job_type_id`, optionally changes the queue, and starts it as a clean `DRAFT` without inherited handler material. A unique predecessor constraint keeps the history linear, while the existing Publisher/name/version constraint handles concurrent duplicate creation.
+
+Older releases are not modified or automatically disabled when a new draft is created. Existing jobs and workers may remain pinned to them, and Producers can deliberately use an older active ID for compatibility. Retirement is a separate explicit operation after work has drained.
+
 These checks prove integrity and package structure, not that Publisher code is harmless. Admin approval provides a deliberate release gate, and the signature lets workers verify the approved bytes independently. Worker delivery repeats the package checks and still requires explicit execution consent. Docker isolation limits runtime access.
 
 ---

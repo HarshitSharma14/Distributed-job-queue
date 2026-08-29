@@ -67,6 +67,20 @@ Store `HANDLER_SIGNING_PRIVATE_KEY` only with the API/Admin deployment. Configur
 
 A Publisher upload is verified and promoted as immutable, then remains `PENDING_APPROVAL`. An Admin must approve and sign that exact Job Type ID, name, version, and digest before it becomes `ACTIVE`. Workers verify this release signature before installing the bundle.
 
+### Create a new Job Type version
+
+Create the next immutable draft from the latest active or disabled release:
+
+```bash
+curl -X POST http://localhost:8000/job-types/<current_job_type_id>/versions \
+  -H 'Content-Type: application/json' \
+  -H 'X-CSRF-Token: <csrf-token>' \
+  -b 'djq_session=<session-token>; djq_csrf=<csrf-token>' \
+  -d '{}'
+```
+
+The new row keeps the Publisher and name, increments the version, inherits the queue unless a replacement is supplied, and starts as `DRAFT` with no handler or signature. The previous release remains unchanged for pinned jobs and workers.
+
 ### Stop services
 
 ```bash

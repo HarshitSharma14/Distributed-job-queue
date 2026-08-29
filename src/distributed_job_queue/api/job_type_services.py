@@ -60,6 +60,53 @@ def create_draft_job_type(
         raise JobTypeConflict("Job Type version already exists") from exc
 
 
+def create_next_job_type_version(
+    session: Session,
+    source_job_type_id: str,
+    *,
+    publisher_id: str,
+    queue: str | None,
+) -> JobType | None:
+    repository = IdentityRepository(session)
+    source = repository.get_owned_job_type(
+        source_job_type_id,
+        publisher_id=publisher_id,
+        for_update=True,
+    )
+    if source is None:
+        return None
+    if source.status not in {
+        JobTypeStatus.ACTIVE.value,
+        JobTypeStatus.DISABLED.value,
+    }:
+        raise JobTypeStateConflict(
+            "Only released or disabled Job Types can create a new version"
+        )
+
+    latest = repository.get_latest_job_type_version(
+        publisher_id=publisher_id,
+        name=source.name,
+        for_update=True,
+    )
+    if latest is None or latest.id != source.id:
+        raise JobTypeStateConflict(
+            "A new version can be created only from the latest version"
+        )
+
+    try:
+        with session.begin_nested():
+            return repository.create_job_type(
+                publisher_id=source.publisher_id,
+                name=source.name,
+                version=source.version + 1,
+                queue=queue or source.queue,
+                supersedes_job_type_id=source.id,
+                status=JobTypeStatus.DRAFT,
+            )
+    except IntegrityError as exc:
+        raise JobTypeConflict("The next Job Type version already exists") from exc
+
+
 def list_visible_job_types(
     session: Session,
     *,
