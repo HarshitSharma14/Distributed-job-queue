@@ -38,25 +38,33 @@ class GatewayClaim:
     lease_expires_at: datetime
 
 
+@dataclass(frozen=True, slots=True)
+class GatewayRegistration:
+    worker_id: str
+    capabilities: tuple[str, ...]
+    queue: str
+    token_expires_at: datetime
+
+
 class WorkerGatewayClient:
     """Expose worker operations without infrastructure credentials."""
 
     def __init__(
         self,
         api_url: str,
-        token: str,
+        enrollment_token: str,
         *,
         request_timeout_seconds: float = 10,
         transport: httpx.BaseTransport | None = None,
     ) -> None:
         if not api_url:
             raise ValueError("api_url must not be empty")
-        if not token:
-            raise ValueError("token must not be empty")
+        if not enrollment_token:
+            raise ValueError("enrollment_token must not be empty")
         self.request_timeout_seconds = request_timeout_seconds
         self._client = httpx.Client(
             base_url=api_url.rstrip("/"),
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Authorization": f"Bearer {enrollment_token}"},
             timeout=request_timeout_seconds,
             transport=transport,
         )
@@ -69,12 +77,23 @@ class WorkerGatewayClient:
         self._client.close()
         self._upload_client.close()
 
-    def register(self, worker_id: str, capabilities: list[str]) -> None:
+    def register(self, worker_id: str) -> GatewayRegistration:
         response = self._client.post(
             "/worker/v1/workers/register",
-            json={"worker_id": worker_id, "capabilities": capabilities},
+            json={"worker_id": worker_id},
         )
         self._raise_for_gateway_error(response)
+        body = response.json()
+        worker_token = body.get("worker_token")
+        if not isinstance(worker_token, str) or not worker_token:
+            raise GatewayRequestError("Gateway did not return a Worker Agent token")
+        self._client.headers["Authorization"] = f"Bearer {worker_token}"
+        return GatewayRegistration(
+            worker_id=str(body["worker_id"]),
+            capabilities=tuple(body["capabilities"]),
+            queue=str(body["queue"]),
+            token_expires_at=datetime.fromisoformat(body["token_expires_at"]),
+        )
 
     def heartbeat(self, worker_id: str) -> bool:
         response = self._client.post(

@@ -27,18 +27,6 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run a distributed job worker")
     parser.add_argument("--name", help="Stable ID for this worker process")
     parser.add_argument(
-        "--queue",
-        action="append",
-        default=[],
-        help="Queue to consume; may be provided more than once",
-    )
-    parser.add_argument(
-        "--capability",
-        action="append",
-        default=[],
-        help="Advertised capability; defaults to registered job types",
-    )
-    parser.add_argument(
         "--handler-module",
         action="append",
         required=True,
@@ -51,17 +39,20 @@ def heartbeat_loop(
     stop: threading.Event,
     *,
     worker_id: str,
-    capabilities: list[str],
     interval_seconds: float,
     heartbeat: Callable[[str], bool],
-    register: Callable[[str, list[str]], None],
 ) -> None:
     """Maintain worker presence independently of polling and execution."""
 
     while not stop.wait(interval_seconds):
         try:
             if not heartbeat(worker_id):
-                register(worker_id, capabilities)
+                logger.error(
+                    "Registered Worker Agent no longer exists",
+                    extra={"event": "worker.registration_lost", "worker_id": worker_id},
+                )
+                stop.set()
+                return
         except Exception:
             logger.exception(
                 "Worker heartbeat failed",
@@ -146,16 +137,17 @@ def main() -> None:
     configure_logging(
         "worker",
         debug=settings.debug,
-        secrets=(settings.worker_gateway_token,),
+        secrets=(settings.worker_enrollment_token or "",),
     )
 
     registry = HandlerRegistry()
     load_handler_modules(registry, args.handler_module)
     worker_id = create_worker_id(args.name)
-    queue_names = args.queue or ["default"]
-    capabilities = args.capability or list(registry.job_types())
-    if not capabilities:
+    local_capabilities = list(registry.job_types())
+    if not local_capabilities:
         raise SystemExit("No handlers or worker capabilities were registered")
+    if not settings.worker_enrollment_token:
+        raise SystemExit("WORKER_ENROLLMENT_TOKEN is required to register a worker")
 
     stop = threading.Event()
 
@@ -167,7 +159,7 @@ def main() -> None:
 
     gateway = WorkerGatewayClient(
         settings.worker_gateway_url,
-        settings.worker_gateway_token,
+        settings.worker_enrollment_token,
     )
     consumer = WorkerConsumer(gateway, registry)
     executor = WorkerExecutor(
@@ -180,17 +172,22 @@ def main() -> None:
         kwargs={
             "stop": stop,
             "worker_id": worker_id,
-            "capabilities": capabilities,
             "interval_seconds": settings.worker_heartbeat_interval_seconds,
             "heartbeat": gateway.heartbeat,
-            "register": gateway.register,
         },
         name=f"heartbeat-{worker_id}",
         daemon=True,
     )
     heartbeat_started = False
     try:
-        gateway.register(worker_id, capabilities)
+        registration = gateway.register(worker_id)
+        unsupported = set(registration.capabilities) - set(local_capabilities)
+        if unsupported:
+            raise SystemExit(
+                "Worker bundle does not provide assigned handler(s): "
+                + ", ".join(sorted(unsupported))
+            )
+        queue_names = [registration.queue]
         heartbeat_thread.start()
         heartbeat_started = True
         consume_loop(

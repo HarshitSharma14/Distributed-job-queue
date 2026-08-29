@@ -5,8 +5,8 @@ This is the working checklist for implementation. We complete and verify each it
 ## Current focus
 
 - **Current phase:** Phase 7.5 — Role-scoped dashboard product
-- **Next step:** Design safe Worker handler distribution, per-agent credentials, and execution isolation
-- **Current milestone:** Handler bundles use signed uploads, SHA-256 and ZIP/manifest validation, immutable promotion, and controlled Job Type activation; 133 tests pass
+- **Next step:** Add safe, temporary handler download and local bundle installation for enrolled Worker Agents
+- **Current milestone:** One-time Worker enrollment and revocable per-agent credentials enforce exact Worker, Job Type, and queue boundaries; 135 tests pass
 
 ## Phase 1 — Project foundation
 
@@ -65,7 +65,7 @@ This is the working checklist for implementation. We complete and verify each it
 - [x] Implement `POST /jobs`
 - [x] Implement `GET /jobs/{job_id}`
 - [x] Implement worker registration and heartbeat endpoints
-- [x] Add the Worker Gateway module and limited worker-token dependency
+- [x] Add the Worker Gateway module and per-agent authentication dependencies
 - [x] Move job claim and start handoff behind the Worker Gateway
 - [x] Move lease renewal behind the Worker Gateway
 - [x] Implement job completion and failure endpoints
@@ -73,10 +73,10 @@ This is the working checklist for implementation. We complete and verify each it
 - [x] Add request validation and idempotency handling
 - [x] Add API tests
 
-## Deferred — Worker security design
+## Worker security design
 
-- [ ] Define worker credential issuance, expiration, rotation, and revocation
-- [ ] Define publisher, producer, worker, and admin authorization scopes
+- [x] Define worker credential issuance, expiration, rotation, and revocation
+- [x] Define publisher, producer, worker, and admin authorization scopes
 - [ ] Define handler approval, signing, and full versioning policy
 - [x] Validate handler digest, size, ZIP structure, paths, manifest, and entrypoint
 - [x] Return temporary signed upload URLs for handler artifacts
@@ -108,7 +108,7 @@ This is the working checklist for implementation. We complete and verify each it
 - [x] Add Producer API keys
 - [x] Apply role and ownership authorization to job submission and detail APIs
 - [ ] Apply role and ownership authorization to remaining product APIs
-- [ ] Replace the shared Worker Gateway token with per-agent credentials
+- [x] Replace the shared Worker Gateway token with per-agent credentials
 - [x] Add Publisher Job Type creation, listing, detail, and disable APIs
 - [x] Add handler-artifact upload, integrity/structure verification, immutable promotion, and activation
 - [ ] Add new immutable Job Type version creation
@@ -185,3 +185,4 @@ This is the working checklist for implementation. We complete and verify each it
 | 2026-08-29 | Producer authentication and job authorization added | Added hashed, scoped, expiring, revocable Producer API keys; one-time key disclosure; Job Type-based submissions; Producer-scoped idempotency; Admin, Publisher, and Producer job visibility; migration `0009`; and integration coverage; all 125 tests pass with no Alembic drift |
 | 2026-08-29 | Publisher Job Type management added | Added CSRF-protected draft creation, ownership-scoped catalog and detail APIs, Admin visibility, non-destructive disabling, duplicate-version protection, and rejection of draft submissions; all 128 tests pass with no Alembic drift |
 | 2026-08-29 | Verified handler activation added | Added reserved signed uploads, private handler storage, SHA-256 and size checks, ZIP traversal/symlink/zip-bomb defenses, manifest validation, content-addressed immutable promotion, controlled activation, migrations `0010`–`0011`, and real MinIO coverage; all 133 tests pass with no Alembic drift |
+| 2026-08-29 | Per-agent Worker credentials added | Added CSRF-protected one-time enrollments, hashed and expiring agent credentials, automatic rotation, dashboard listing and revocation, exact Worker/Job Type/queue authorization, migration `0012`, runtime token exchange, and impersonation/cross-Publisher coverage; all 135 tests pass |

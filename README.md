@@ -88,13 +88,15 @@ def register_handlers(registry: HandlerRegistry) -> None:
 Run a worker subscribed to the matching queue:
 
 ```bash
+export WORKER_ENROLLMENT_TOKEN='djq_enroll_...'
 job-worker \
   --name report-worker-1 \
-  --queue reports \
   --handler-module project.handlers
 ```
 
-`--queue` and `--handler-module` may be repeated. If capabilities are not supplied explicitly, the worker advertises its registered job types.
+An authenticated Worker user creates the short-lived enrollment token for one active Job Type. Registration consumes it once and returns a revocable credential bound to that Worker Agent. The platform—not the worker—selects the Job Type capability and queue. The worker exits if its local bundle does not contain the assigned handler.
+
+After registration, the worker uses only its agent credential for heartbeats, claims, lease renewal, result upload, completion, and failure. It cannot act as another worker, claim another queue or Job Type, or access PostgreSQL, Redis, or permanent storage credentials.
 
 When a handler returns a non-`None` JSON-serializable value, the worker requests a short-lived upload URL from the Worker Gateway, uploads the result to private MinIO storage, and completes the job with the issued object reference. The worker never receives MinIO access credentials.
 

@@ -5,24 +5,17 @@ from distributed_job_queue.domain.job import JobStatus
 from distributed_job_queue.workers.runner import consume_loop, heartbeat_loop
 
 
-def test_heartbeat_reregisters_missing_worker():
+def test_heartbeat_stops_when_registered_agent_disappears():
     stop = threading.Event()
-    registrations = []
-
-    def register(worker_id, capabilities):
-        registrations.append((worker_id, capabilities))
-        stop.set()
 
     heartbeat_loop(
         stop,
         worker_id="worker-1",
-        capabilities=["reports"],
         interval_seconds=0.001,
         heartbeat=lambda worker_id: False,
-        register=register,
     )
 
-    assert registrations == [("worker-1", ["reports"])]
+    assert stop.is_set()
 
 
 def test_consume_loop_rotates_queues_and_executes_claimed_job():

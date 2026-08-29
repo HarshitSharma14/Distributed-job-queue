@@ -12,7 +12,6 @@ def main() -> None:
         "api",
         debug=settings.debug,
         secrets=(
-            settings.worker_gateway_token,
             settings.minio_access_key,
             settings.minio_secret_key,
         ),

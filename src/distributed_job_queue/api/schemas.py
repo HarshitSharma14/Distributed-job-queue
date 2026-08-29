@@ -68,17 +68,21 @@ class JobDetailResponse(BaseModel):
 
 
 class WorkerRegistrationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     worker_id: str = Field(min_length=1, max_length=100, pattern=NAME_PATTERN)
-    capabilities: list[WorkerCapability] = Field(min_length=1, max_length=100)
 
 
 class WorkerRegistrationResponse(BaseModel):
     worker_id: str
     capabilities: list[str]
+    queue: str
     status: WorkerStatus
     registered_at: datetime
     last_heartbeat_at: datetime
     heartbeat_interval_seconds: int
+    worker_token: str
+    token_expires_at: datetime
 
 
 class WorkerHeartbeatResponse(BaseModel):

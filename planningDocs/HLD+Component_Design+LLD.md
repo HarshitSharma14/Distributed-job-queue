@@ -327,7 +327,7 @@ The claim operation must be atomic so two workers cannot own the same queue entr
 
 ### Choose: HTTP long polling through a Worker Gateway API
 
-Workers communicate only with the gateway using a limited worker token. The gateway performs the Redis blocking wait and atomic priority claim, then performs authoritative state changes in PostgreSQL. Workers never receive PostgreSQL, Redis, or object-storage credentials.
+Workers communicate only with the gateway using a credential bound to one Worker Agent. The gateway performs the Redis blocking wait and atomic priority claim, then performs authoritative state changes in PostgreSQL. Workers never receive PostgreSQL, Redis, or object-storage credentials.
 
 After assignment, a worker receives only the required job payload, approved handler metadata, a fenced lease token, and temporary signed artifact URLs when needed. It cannot query databases, modify queues, access unrelated jobs, or call internal services directly.
 
@@ -610,6 +610,26 @@ Browser sessions authenticate humans only. Producer applications use independent
 
 Worker Agent credentials, the metrics token, and internal process credentials remain separate credential classes with narrower permissions.
 
+## Worker Agent enrollment
+
+A Worker user creates a short-lived enrollment for one active Job Type with a verified handler. The raw enrollment token is shown once and stored only as a hash. Registration consumes it atomically, derives the capability and queue from the Job Type, and returns an expiring agent token once.
+
+```text
+Worker user creates enrollment
+  ↓
+Worker starts with one-time token
+  ↓
+Gateway registers owned Worker Agent
+  ↓
+Enrollment becomes used
+  ↓
+Gateway returns per-agent token once
+  ↓
+Heartbeat / claim / renew / finish use agent token
+```
+
+The agent token is checked against the requested Worker ID, exact `job_type_id`, and assigned queue. It cannot impersonate another agent or claim a same-named Job Type from another Publisher. Re-enrollment revokes the previous active credential, and dashboard revocation takes effect immediately.
+
 ---
 
 # 14. How are Job Types managed?
@@ -782,7 +802,8 @@ API Service (FastAPI)
   └─ write PostgreSQL jobs + outbox events
 
 Worker Gateway (FastAPI module)
-  ├─ authenticate limited worker tokens
+  ├─ exchange one-time enrollments for per-agent credentials
+  ├─ authenticate exact Worker, Job Type, and queue authority
   ├─ register workers and receive heartbeats
   ├─ long-poll and claim jobs through Redis
   ├─ validate lease renewals and terminal reports
@@ -832,6 +853,7 @@ Delivery:              At-least-once
 State:                 PostgreSQL source of truth
 Worker Trust Boundary: No direct database, Redis, or storage access
 Worker Management:     Registration + heartbeats
+Worker Authentication: One-time enrollment + revocable per-agent credential
 Failure Recovery:      Job leases + requeue
 Retries:               Exponential backoff with jitter
 Permanent Failure:     Dead-letter queue

@@ -7,10 +7,16 @@ from typing import Annotated
 from fastapi import Depends, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from redis import Redis
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from distributed_job_queue.common.config import load_settings
 from distributed_job_queue.api.errors import APIError
+from distributed_job_queue.auth.worker_credentials import (
+    WorkerAgentPrincipal,
+    WorkerEnrollmentPrincipal,
+    authenticate_worker_agent,
+    authenticate_worker_enrollment,
+)
 from distributed_job_queue.persistence.database import SessionFactory
 from distributed_job_queue.queueing import RedisQueue
 from distributed_job_queue.storage import MinioHandlerStorage, MinioResultStorage
@@ -66,25 +72,47 @@ def get_handler_storage() -> MinioHandlerStorage:
     )
 
 
-def require_worker_token(
+def require_worker_enrollment(
     credentials: Annotated[
         HTTPAuthorizationCredentials | None, Depends(worker_bearer)
     ],
-) -> None:
-    """Protect the gateway until the complete credential model is designed."""
+    session: Annotated[Session, Depends(get_session)],
+) -> WorkerEnrollmentPrincipal:
+    """Authenticate the one-time credential accepted only by registration."""
 
-    expected_token = load_settings().worker_gateway_token
-    if (
-        credentials is None
-        or credentials.scheme.lower() != "bearer"
-        or not compare_digest(credentials.credentials, expected_token)
-    ):
+    principal = None
+    if credentials is not None and credentials.scheme.lower() == "bearer":
+        principal = authenticate_worker_enrollment(session, credentials.credentials)
+    if principal is None:
         raise APIError(
             status_code=status.HTTP_401_UNAUTHORIZED,
             code="WORKER_UNAUTHORIZED",
-            message="Invalid worker token",
+            message="Invalid or expired Worker enrollment token",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    return principal
+
+
+def require_worker_agent(
+    credentials: Annotated[
+        HTTPAuthorizationCredentials | None, Depends(worker_bearer)
+    ],
+    session_factory: Annotated[sessionmaker, Depends(get_session_factory)],
+) -> WorkerAgentPrincipal:
+    """Authenticate an agent without holding a DB transaction during long polling."""
+
+    principal = None
+    if credentials is not None and credentials.scheme.lower() == "bearer":
+        with session_factory.begin() as session:
+            principal = authenticate_worker_agent(session, credentials.credentials)
+    if principal is None:
+        raise APIError(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            code="WORKER_UNAUTHORIZED",
+            message="Invalid or expired Worker Agent token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return principal
 
 
 def require_metrics_token(

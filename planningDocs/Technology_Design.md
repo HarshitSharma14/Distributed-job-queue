@@ -189,7 +189,7 @@ Workers communicate exclusively with a Worker Gateway API. The gateway owns Post
 
 Python workers use a synchronous `httpx` client because handler execution is currently synchronous. Heartbeats and lease renewal run in independent threads through the same HTTP abstraction.
 
-The exact token scheme and handler security model will be selected in a separate security design.
+Registration accepts a short-lived, one-time opaque enrollment token created by an authenticated Worker user. The gateway exchanges it for an expiring, revocable opaque credential bound to one Worker Agent and stores only its SHA-256 hash. Every later operation verifies the bound Worker ID, exact Job Type ID, and assigned queue. Re-enrollment rotates the credential; dashboard revocation takes effect immediately.
 
 ---
 

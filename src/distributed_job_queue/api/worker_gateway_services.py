@@ -21,6 +21,12 @@ from distributed_job_queue.api.schemas import (
     WorkerResultUploadResponse,
 )
 from distributed_job_queue.common.config import load_settings
+from distributed_job_queue.auth.worker_credentials import (
+    WorkerCredentialResult,
+    WorkerEnrollmentPrincipal,
+    WorkerRegistrationRejected,
+    exchange_worker_enrollment,
+)
 from distributed_job_queue.common.metrics import (
     JOB_ATTEMPTS_FINISHED,
     JOB_ATTEMPTS_STARTED,
@@ -59,14 +65,30 @@ class WorkerResultRejected(ValueError):
 
 
 def register_gateway_worker(
-    session: Session, request: WorkerRegistrationRequest
+    session: Session,
+    request: WorkerRegistrationRequest,
+    *,
+    principal: WorkerEnrollmentPrincipal,
 ) -> WorkerRegistrationResponse:
     """Register or reconnect one worker through the platform boundary."""
 
     now = datetime.now(timezone.utc)
+    existing = WorkerRepository(session).get(request.worker_id)
+    if existing is not None and existing.owner_user_id != principal.owner_user_id:
+        raise WorkerRegistrationRejected(
+            "Worker Agent ID is already owned by another user"
+        )
     worker = WorkerRepository(session).register(
         request.worker_id,
-        capabilities=request.capabilities,
+        capabilities=[principal.job_type.name],
+        now=now,
+        owner_user_id=principal.owner_user_id,
+    )
+    credential_result: WorkerCredentialResult = exchange_worker_enrollment(
+        session,
+        principal,
+        worker=worker,
+        lifetime_hours=load_settings().worker_credential_hours,
         now=now,
     )
     logger.info(
@@ -80,12 +102,15 @@ def register_gateway_worker(
     return WorkerRegistrationResponse(
         worker_id=worker.id,
         capabilities=worker.capabilities,
+        queue=principal.job_type.queue,
         status=WorkerStatus(worker.status),
         registered_at=worker.registered_at,
         last_heartbeat_at=worker.last_heartbeat_at,
         heartbeat_interval_seconds=(
             load_settings().worker_heartbeat_interval_seconds
         ),
+        worker_token=credential_result.raw_token,
+        token_expires_at=credential_result.credential.expires_at,
     )
 
 
@@ -109,6 +134,7 @@ def claim_gateway_job(
     request: WorkerClaimRequest,
     *,
     session_factory,
+    authorized_job_type_id: str | None = None,
 ) -> WorkerClaimResponse | None:
     """Long-poll and durably hand one compatible job to a worker."""
 
@@ -143,6 +169,13 @@ def claim_gateway_job(
             if job is None or job.status != JobStatus.QUEUED.value:
                 _release_stale_gateway_claim(queue, lease)
                 return None
+            if (
+                authorized_job_type_id is not None
+                and job.job_type_id != authorized_job_type_id
+            ):
+                raise WorkerCapabilityMismatch(
+                    f"Worker {request.worker_id} is not assigned to this Job Type"
+                )
             if job.type not in capabilities:
                 raise WorkerCapabilityMismatch(
                     f"Worker {request.worker_id} does not support {job.type}"

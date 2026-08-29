@@ -19,13 +19,28 @@ from distributed_job_queue.api.dependencies import (
 from distributed_job_queue.common.config import load_settings
 from distributed_job_queue.domain.job import JobStatus
 from distributed_job_queue.domain.worker import WorkerStatus
+from distributed_job_queue.domain.identity import UserRole
 from distributed_job_queue.persistence.database import engine
-from distributed_job_queue.persistence.models import Job, JobAttempt, Worker
-from distributed_job_queue.persistence.repositories import JobRepository
+from distributed_job_queue.persistence.models import (
+    Job,
+    JobAttempt,
+    JobType,
+    Worker,
+    WorkerCredential,
+    WorkerEnrollment,
+)
+from distributed_job_queue.persistence.repositories import (
+    IdentityRepository,
+    JobRepository,
+)
+from distributed_job_queue.auth.security import token_hash
+from distributed_job_queue.auth.worker_credentials import issue_worker_enrollment
 from distributed_job_queue.queueing import RedisQueue
 from distributed_job_queue.storage import ResultUpload
 
-WORKER_TOKEN = "integration-worker-token"
+_DEFAULT_TOKEN = object()
+_active_worker_token: str | None = None
+_active_job_type_id: str | None = None
 
 
 def assert_gateway_error(response: httpx.Response, *, code: str, message: str) -> None:
@@ -50,15 +65,23 @@ class RecordingResultStorage:
 
 @pytest.fixture
 def gateway_context(monkeypatch):
-    monkeypatch.setenv("WORKER_GATEWAY_TOKEN", WORKER_TOKEN)
+    global _active_worker_token
+    _active_worker_token = None
     connection = engine.connect()
     transaction = connection.begin()
     session = Session(bind=connection, expire_on_commit=False)
+    request_session_factory = sessionmaker(
+        bind=connection,
+        class_=Session,
+        expire_on_commit=False,
+        join_transaction_mode="create_savepoint",
+    )
 
     def override_session():
         yield session
 
     app.dependency_overrides[get_session] = override_session
+    app.dependency_overrides[get_session_factory] = lambda: request_session_factory
     try:
         yield session
     finally:
@@ -73,8 +96,10 @@ def gateway_request(
     path: str,
     *,
     request_body: dict | None = None,
-    token: str | None = WORKER_TOKEN,
+    token: str | None | object = _DEFAULT_TOKEN,
 ) -> httpx.Response:
+    if token is _DEFAULT_TOKEN:
+        token = _active_worker_token
     async def send_request() -> httpx.Response:
         transport = httpx.ASGITransport(app=app)
         headers = {"Authorization": f"Bearer {token}"} if token else None
@@ -90,7 +115,8 @@ def gateway_request(
 
 @pytest.fixture
 def claim_gateway_context(monkeypatch):
-    monkeypatch.setenv("WORKER_GATEWAY_TOKEN", WORKER_TOKEN)
+    global _active_worker_token
+    _active_worker_token = None
     suffix = uuid4().hex
     queue_name = f"gateway-claim-{suffix}"
     connection = engine.connect()
@@ -134,12 +160,54 @@ def claim_gateway_context(monkeypatch):
         connection.close()
 
 
-def register_claim_worker(worker_id: str, capability: str) -> httpx.Response:
-    return gateway_request(
+def register_claim_worker(
+    session: Session,
+    queue_name: str,
+    worker_id: str,
+    capability: str,
+) -> httpx.Response:
+    global _active_worker_token
+    enrollment_token = create_enrollment_token(
+        session, capability=capability, queue_name=queue_name
+    )
+    response = gateway_request(
         "POST",
         "/worker/v1/workers/register",
-        request_body={"worker_id": worker_id, "capabilities": [capability]},
+        request_body={"worker_id": worker_id},
+        token=enrollment_token,
     )
+    if response.status_code == 201:
+        _active_worker_token = response.json()["worker_token"]
+    return response
+
+
+def create_enrollment_token(
+    session: Session,
+    *,
+    capability: str,
+    queue_name: str,
+) -> str:
+    global _active_job_type_id
+    identities = IdentityRepository(session)
+    user = identities.create_user(
+        email=f"worker-{uuid4()}@example.com",
+        display_name="Gateway Worker",
+    )
+    identities.assign_role(user, UserRole.WORKER)
+    job_type = identities.create_job_type(
+        publisher_id=user.id,
+        name=capability,
+        queue=queue_name,
+        handler_ref=f"handlers/{capability}.zip",
+        handler_digest="a" * 64,
+    )
+    _active_job_type_id = job_type.id
+    return issue_worker_enrollment(
+        session,
+        owner_user_id=user.id,
+        job_type_id=job_type.id,
+        lifetime_minutes=15,
+    ).raw_token
 
 
 def create_ready_job(
@@ -149,12 +217,19 @@ def create_ready_job(
     *,
     max_attempts: int = 5,
 ) -> Job:
+    if _active_job_type_id is None:
+        raise AssertionError("A Worker enrollment must be created before a job")
+    job_type = session.get(JobType, _active_job_type_id)
+    assert job_type is not None
     repository = JobRepository(session)
     job = repository.create(
         job_type="generate_report",
         queue=queue_name,
         payload={"report_id": 42},
         max_attempts=max_attempts,
+        job_type_id=job_type.id,
+        publisher_id=job_type.publisher_id,
+        producer_id=job_type.publisher_id,
     )
     repository.transition(job, JobStatus.QUEUED)
     queue.enqueue(job.id, queue=queue_name, priority=job.priority)
@@ -169,7 +244,9 @@ def claim_ready_job(
     worker_id: str = "worker-1",
     max_attempts: int = 5,
 ) -> tuple[Job, dict]:
-    assert register_claim_worker(worker_id, "generate_report").status_code == 201
+    assert register_claim_worker(
+        session, queue_name, worker_id, "generate_report"
+    ).status_code == 201
     job = create_ready_job(
         session,
         queue,
@@ -204,27 +281,31 @@ def test_worker_gateway_requires_valid_bearer_token(gateway_context, token):
     assert_gateway_error(
         response,
         code="WORKER_UNAUTHORIZED",
-        message="Invalid worker token",
+        message="Invalid or expired Worker enrollment token",
     )
     assert response.headers["www-authenticate"] == "Bearer"
 
 
 def test_register_worker_through_gateway(gateway_context):
+    global _active_worker_token
     session = gateway_context
+    enrollment_token = create_enrollment_token(
+        session, capability="generate_report", queue_name="reports"
+    )
 
     response = gateway_request(
         "POST",
         "/worker/v1/workers/register",
-        request_body={
-            "worker_id": "report-worker-1",
-            "capabilities": ["generate_report", "generate_report", "export_csv"],
-        },
+        request_body={"worker_id": "report-worker-1"},
+        token=enrollment_token,
     )
 
     assert response.status_code == 201
     body = response.json()
     assert body["worker_id"] == "report-worker-1"
-    assert body["capabilities"] == ["export_csv", "generate_report"]
+    assert body["capabilities"] == ["generate_report"]
+    assert body["queue"] == "reports"
+    assert body["worker_token"].startswith("djq_worker_")
     assert body["status"] == WorkerStatus.ONLINE.value
     assert body["heartbeat_interval_seconds"] == 10
     assert body["registered_at"]
@@ -232,25 +313,52 @@ def test_register_worker_through_gateway(gateway_context):
 
     worker = session.get(Worker, "report-worker-1")
     assert worker is not None
-    assert worker.capabilities == ["export_csv", "generate_report"]
+    assert worker.capabilities == ["generate_report"]
+    credential = session.scalar(
+        select(WorkerCredential).where(WorkerCredential.worker_id == worker.id)
+    )
+    assert credential is not None
+    assert credential.token_hash == token_hash(body["worker_token"])
+    assert credential.token_hash != body["worker_token"]
+    enrollment = session.scalar(
+        select(WorkerEnrollment).where(
+            WorkerEnrollment.token_hash == token_hash(enrollment_token)
+        )
+    )
+    assert enrollment is not None
+    assert enrollment.used_at is not None
+    _active_worker_token = body["worker_token"]
+
+    replay = gateway_request(
+        "POST",
+        "/worker/v1/workers/register",
+        request_body={"worker_id": "report-worker-2"},
+        token=enrollment_token,
+    )
+    assert replay.status_code == 401
 
 
 @pytest.mark.parametrize(
     "request_body",
     [
-        {"worker_id": "", "capabilities": ["reports"]},
-        {"worker_id": "worker with spaces", "capabilities": ["reports"]},
-        {"worker_id": "worker-1", "capabilities": []},
-        {"worker_id": "worker-1", "capabilities": ["invalid capability"]},
+        {"worker_id": ""},
+        {"worker_id": "worker with spaces"},
+        {"worker_id": "worker-1", "capabilities": ["untrusted"]},
     ],
 )
 def test_register_worker_validates_identity_and_capabilities(
     gateway_context, request_body
 ):
-    _ = gateway_context
+    session = gateway_context
+    enrollment_token = create_enrollment_token(
+        session, capability="reports", queue_name="reports"
+    )
 
     response = gateway_request(
-        "POST", "/worker/v1/workers/register", request_body=request_body
+        "POST",
+        "/worker/v1/workers/register",
+        request_body=request_body,
+        token=enrollment_token,
     )
 
     assert response.status_code == 422
@@ -258,10 +366,8 @@ def test_register_worker_validates_identity_and_capabilities(
 
 def test_heartbeat_updates_registered_worker(gateway_context):
     session = gateway_context
-    registered = gateway_request(
-        "POST",
-        "/worker/v1/workers/register",
-        request_body={"worker_id": "worker-1", "capabilities": ["reports"]},
+    registered = register_claim_worker(
+        session, "reports", "worker-1", "reports"
     ).json()
     registered_at = datetime.fromisoformat(registered["last_heartbeat_at"])
 
@@ -281,24 +387,29 @@ def test_heartbeat_updates_registered_worker(gateway_context):
     assert worker.last_heartbeat_at >= registered_at
 
 
-def test_heartbeat_rejects_unknown_worker(gateway_context):
-    _ = gateway_context
+def test_agent_token_cannot_impersonate_another_worker(gateway_context):
+    session = gateway_context
+    assert register_claim_worker(
+        session, "reports", "worker-1", "reports"
+    ).status_code == 201
 
     response = gateway_request(
         "POST", "/worker/v1/workers/missing-worker/heartbeat"
     )
 
-    assert response.status_code == 404
+    assert response.status_code == 403
     assert_gateway_error(
         response,
-        code="WORKER_NOT_FOUND",
-        message="Worker not found",
+        code="WORKER_IDENTITY_MISMATCH",
+        message="Worker Agent token is not valid for this worker ID",
     )
 
 
 def test_gateway_claims_job_and_persists_running_handoff(claim_gateway_context):
     session, queue, _, queue_name = claim_gateway_context
-    assert register_claim_worker("worker-1", "generate_report").status_code == 201
+    assert register_claim_worker(
+        session, queue_name, "worker-1", "generate_report"
+    ).status_code == 201
     job = create_ready_job(session, queue, queue_name)
 
     response = gateway_request(
@@ -338,8 +449,10 @@ def test_gateway_claims_job_and_persists_running_handoff(claim_gateway_context):
 def test_gateway_claim_returns_no_content_when_queue_is_empty(
     claim_gateway_context,
 ):
-    _, _, _, queue_name = claim_gateway_context
-    assert register_claim_worker("worker-1", "generate_report").status_code == 201
+    session, _, _, queue_name = claim_gateway_context
+    assert register_claim_worker(
+        session, queue_name, "worker-1", "generate_report"
+    ).status_code == 201
 
     response = gateway_request(
         "POST",
@@ -355,8 +468,11 @@ def test_gateway_claim_returns_no_content_when_queue_is_empty(
     assert response.content == b""
 
 
-def test_gateway_claim_rejects_unregistered_worker(claim_gateway_context):
-    _, _, _, queue_name = claim_gateway_context
+def test_gateway_claim_rejects_worker_id_impersonation(claim_gateway_context):
+    session, _, _, queue_name = claim_gateway_context
+    assert register_claim_worker(
+        session, queue_name, "worker-1", "generate_report"
+    ).status_code == 201
 
     response = gateway_request(
         "POST",
@@ -368,17 +484,92 @@ def test_gateway_claim_rejects_unregistered_worker(claim_gateway_context):
         },
     )
 
+    assert response.status_code == 403
+    assert_gateway_error(
+        response,
+        code="WORKER_IDENTITY_MISMATCH",
+        message="Worker Agent token is not valid for this worker ID",
+    )
+
+
+def test_gateway_claim_rejects_unassigned_queue(claim_gateway_context):
+    session, _, _, queue_name = claim_gateway_context
+    assert register_claim_worker(
+        session, queue_name, "worker-1", "generate_report"
+    ).status_code == 201
+
+    response = gateway_request(
+        "POST",
+        "/worker/v1/jobs/claim",
+        request_body={
+            "worker_id": "worker-1",
+            "queue": "another-queue",
+            "wait_seconds": 0,
+        },
+    )
+
+    assert response.status_code == 403
+    assert_gateway_error(
+        response,
+        code="WORKER_QUEUE_MISMATCH",
+        message="Worker Agent token is not valid for this queue",
+    )
+
+
+def test_gateway_rejects_same_named_job_type_from_another_publisher(
+    claim_gateway_context,
+):
+    session, queue, _, queue_name = claim_gateway_context
+    assert register_claim_worker(
+        session, queue_name, "worker-1", "generate_report"
+    ).status_code == 201
+    identities = IdentityRepository(session)
+    other_publisher = identities.create_user(
+        email=f"other-publisher-{uuid4()}@example.com",
+        display_name="Other Publisher",
+    )
+    other_job_type = identities.create_job_type(
+        publisher_id=other_publisher.id,
+        name="generate_report",
+        queue=queue_name,
+        handler_ref="handlers/other-report.zip",
+        handler_digest="b" * 64,
+    )
+    job = JobRepository(session).create(
+        job_type="generate_report",
+        queue=queue_name,
+        payload={"report_id": 99},
+        job_type_id=other_job_type.id,
+        publisher_id=other_publisher.id,
+        producer_id=other_publisher.id,
+    )
+    JobRepository(session).transition(job, JobStatus.QUEUED)
+    queue.enqueue(job.id, queue=queue_name, priority=job.priority)
+
+    response = gateway_request(
+        "POST",
+        "/worker/v1/jobs/claim",
+        request_body={
+            "worker_id": "worker-1",
+            "queue": queue_name,
+            "wait_seconds": 0,
+        },
+    )
+
     assert response.status_code == 409
     assert_gateway_error(
         response,
-        code="WORKER_UNAVAILABLE",
-        message="Worker missing-worker is not registered",
+        code="WORKER_CAPABILITY_MISMATCH",
+        message="Worker worker-1 is not assigned to this Job Type",
     )
+    assert queue.queue_size(queue_name) == 1
 
 
 def test_gateway_returns_incompatible_job_to_ready(claim_gateway_context):
     session, queue, _, queue_name = claim_gateway_context
-    assert register_claim_worker("worker-1", "resize_image").status_code == 201
+    assert register_claim_worker(
+        session, queue_name, "worker-1", "resize_image"
+    ).status_code == 201
     job = create_ready_job(session, queue, queue_name)
 
     response = gateway_request(
@@ -482,7 +673,10 @@ def test_gateway_reports_lease_loss_when_redis_lease_is_missing(
 
 
 def test_gateway_rejects_malformed_lease_token(claim_gateway_context):
-    _, _, _, _ = claim_gateway_context
+    session, _, _, queue_name = claim_gateway_context
+    assert register_claim_worker(
+        session, queue_name, "worker-1", "generate_report"
+    ).status_code == 201
 
     response = gateway_request(
         "POST",

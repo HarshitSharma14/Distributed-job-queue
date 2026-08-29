@@ -17,7 +17,8 @@ def test_load_settings_uses_development_defaults():
     assert settings.job_lease_seconds == 60
     assert settings.worker_long_poll_seconds == 20
     assert settings.worker_gateway_url == "http://localhost:8000"
-    assert settings.worker_gateway_token == "dev-worker-token"
+    assert settings.worker_enrollment_token is None
+    assert settings.worker_credential_hours == 24
     assert settings.result_upload_url_seconds == 300
     assert settings.minio_handler_bucket == "handler-artifacts"
     assert settings.handler_upload_url_seconds == 300
@@ -43,7 +44,8 @@ def test_load_settings_parses_environment_values(monkeypatch):
     monkeypatch.setenv("AUTH_COOKIE_SECURE", "true")
     monkeypatch.setenv("JOB_LEASE_SECONDS", "90")
     monkeypatch.setenv("WORKER_LONG_POLL_SECONDS", "15")
-    monkeypatch.setenv("WORKER_GATEWAY_TOKEN", "test-worker-token")
+    monkeypatch.setenv("WORKER_ENROLLMENT_TOKEN", "test-enrollment-token")
+    monkeypatch.setenv("WORKER_CREDENTIAL_HOURS", "48")
     monkeypatch.setenv("METRICS_TOKEN", "test-metrics-token")
     monkeypatch.setenv("METRICS_PORT", "9100")
     monkeypatch.setenv("WORKER_GATEWAY_URL", "https://queue.example.com")
@@ -68,7 +70,8 @@ def test_load_settings_parses_environment_values(monkeypatch):
     assert settings.auth_cookie_secure is True
     assert settings.job_lease_seconds == 90
     assert settings.worker_long_poll_seconds == 15
-    assert settings.worker_gateway_token == "test-worker-token"
+    assert settings.worker_enrollment_token == "test-enrollment-token"
+    assert settings.worker_credential_hours == 48
     assert settings.metrics_token == "test-metrics-token"
     assert settings.metrics_port == 9100
     assert settings.worker_gateway_url == "https://queue.example.com"
@@ -98,17 +101,16 @@ def test_load_settings_rejects_invalid_boolean(monkeypatch):
         load_settings()
 
 
-def test_load_settings_requires_worker_token_outside_development(monkeypatch):
+def test_load_settings_does_not_require_worker_token_for_platform_processes(monkeypatch):
     monkeypatch.setenv("APP_ENV", "production")
-    monkeypatch.delenv("WORKER_GATEWAY_TOKEN", raising=False)
+    monkeypatch.setenv("METRICS_TOKEN", "metrics-token")
+    monkeypatch.delenv("WORKER_ENROLLMENT_TOKEN", raising=False)
 
-    with pytest.raises(ConfigurationError, match="WORKER_GATEWAY_TOKEN"):
-        load_settings()
+    assert load_settings().worker_enrollment_token is None
 
 
 def test_load_settings_requires_metrics_token_outside_development(monkeypatch):
     monkeypatch.setenv("APP_ENV", "production")
-    monkeypatch.setenv("WORKER_GATEWAY_TOKEN", "worker-token")
     monkeypatch.delenv("METRICS_TOKEN", raising=False)
 
     with pytest.raises(ConfigurationError, match="METRICS_TOKEN"):

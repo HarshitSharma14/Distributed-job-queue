@@ -9,6 +9,7 @@ from distributed_job_queue.api.metrics_routes import router as metrics_router
 from distributed_job_queue.api.job_type_routes import router as job_types_router
 from distributed_job_queue.api.routes import router as jobs_router
 from distributed_job_queue.api.worker_gateway_routes import router as worker_gateway_router
+from distributed_job_queue.api.worker_management_routes import router as worker_management_router
 from distributed_job_queue.common.metrics import register_platform_state_collector
 
 
@@ -20,6 +21,7 @@ def create_app() -> FastAPI:
     application.include_router(auth_router)
     application.include_router(jobs_router)
     application.include_router(job_types_router)
+    application.include_router(worker_management_router)
     application.include_router(worker_gateway_router)
     application.include_router(metrics_router)
     return application

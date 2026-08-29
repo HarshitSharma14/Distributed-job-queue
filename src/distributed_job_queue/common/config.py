@@ -59,7 +59,8 @@ class Settings:
     metrics_token: str
     metrics_port: int
     worker_gateway_url: str
-    worker_gateway_token: str
+    worker_enrollment_token: str | None
+    worker_credential_hours: int
     worker_heartbeat_interval_seconds: int
     worker_offline_after_seconds: int
     worker_long_poll_seconds: int
@@ -79,13 +80,7 @@ def load_settings() -> Settings:
     """Load settings from the process environment."""
 
     environment = os.getenv("APP_ENV", "development")
-    worker_gateway_token = os.getenv("WORKER_GATEWAY_TOKEN")
-    if not worker_gateway_token:
-        if environment != "development":
-            raise ConfigurationError(
-                "WORKER_GATEWAY_TOKEN is required outside development"
-            )
-        worker_gateway_token = "dev-worker-token"
+    worker_enrollment_token = os.getenv("WORKER_ENROLLMENT_TOKEN")
     metrics_token = os.getenv("METRICS_TOKEN")
     if not metrics_token:
         if environment != "development":
@@ -129,7 +124,10 @@ def load_settings() -> Settings:
         worker_gateway_url=os.getenv(
             "WORKER_GATEWAY_URL", "http://localhost:8000"
         ),
-        worker_gateway_token=worker_gateway_token,
+        worker_enrollment_token=worker_enrollment_token,
+        worker_credential_hours=_get_int(
+            "WORKER_CREDENTIAL_HOURS", 24, minimum=1
+        ),
         worker_heartbeat_interval_seconds=_get_int(
             "WORKER_HEARTBEAT_INTERVAL_SECONDS", 10, minimum=1
         ),

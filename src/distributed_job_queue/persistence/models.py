@@ -65,6 +65,12 @@ class User(Base):
     producer_credentials: Mapped[list[ProducerCredential]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    worker_enrollments: Mapped[list[WorkerEnrollment]] = relationship(
+        back_populates="owner", cascade="all, delete-orphan"
+    )
+    worker_credentials: Mapped[list[WorkerCredential]] = relationship(
+        back_populates="owner", cascade="all, delete-orphan"
+    )
 
 
 class BrowserSession(Base):
@@ -317,6 +323,87 @@ class Worker(Base):
 
     jobs: Mapped[list[Job]] = relationship(back_populates="worker")
     owner: Mapped[User] = relationship(back_populates="worker_agents")
+    credentials: Mapped[list[WorkerCredential]] = relationship(
+        back_populates="worker", cascade="all, delete-orphan"
+    )
+
+
+class WorkerEnrollment(Base):
+    """Short-lived, one-time authority to register one Worker Agent."""
+
+    __tablename__ = "worker_enrollments"
+    __table_args__ = (
+        UniqueConstraint("token_hash", name="uq_worker_enrollments_token_hash"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    owner_user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    job_type_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("job_types.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    token_prefix: Mapped[str] = mapped_column(String(20), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    owner: Mapped[User] = relationship(back_populates="worker_enrollments")
+    job_type: Mapped[JobType] = relationship()
+    credential: Mapped[WorkerCredential | None] = relationship(
+        back_populates="enrollment", uselist=False
+    )
+
+
+class WorkerCredential(Base):
+    """Revocable bearer credential bound to exactly one Worker Agent."""
+
+    __tablename__ = "worker_credentials"
+    __table_args__ = (
+        UniqueConstraint("token_hash", name="uq_worker_credentials_token_hash"),
+        UniqueConstraint("enrollment_id", name="uq_worker_credentials_enrollment_id"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    worker_id: Mapped[str] = mapped_column(
+        String(100), ForeignKey("workers.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    owner_user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    enrollment_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("worker_enrollments.id", ondelete="RESTRICT"), nullable=False
+    )
+    token_prefix: Mapped[str] = mapped_column(String(20), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    worker: Mapped[Worker] = relationship(back_populates="credentials")
+    owner: Mapped[User] = relationship(back_populates="worker_credentials")
+    enrollment: Mapped[WorkerEnrollment] = relationship(back_populates="credential")
 
 
 class JobAttempt(Base):

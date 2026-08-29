@@ -42,11 +42,11 @@ Main application package. Production code lives here.
 
 ### `api/`
 
-FastAPI application and process runner. Authentication routes expose login, logout, current-user identity, and Producer API-key lifecycle operations. Authentication dependencies resolve revocable browser sessions or scoped Producer credentials, enforce CSRF for browser writes, and create the request principal used by ownership checks. Job Type routes and services provide Publisher-owned draft creation, scoped catalog/detail reads, global Admin visibility, non-destructive disabling, signed handler uploads, artifact verification, and controlled activation. `schemas.py` defines public and worker-gateway contracts, while `dependencies.py` owns request-scoped transactions, internal Redis construction, and the temporary worker-token boundary. `services.py` coordinates Producer-authenticated, Job Type-based submission and ownership-filtered job details. `worker_gateway_services.py` owns worker presence, claim handoff, lease renewal, and idempotent terminal reporting. `routes.py` exposes producer-facing HTTP operations; `worker_gateway_routes.py` exposes the complete worker control protocol: registration, heartbeat, claim, renewal, completion, and failure. Business rules do not belong in route handlers.
+FastAPI application and process runner. Authentication routes expose human sessions and Producer API keys. Job Type routes own Publisher definitions and verified handler activation. Worker management routes issue one-time enrollments and list or revoke owned agents. `dependencies.py` authenticates registrations and per-agent requests without holding a database connection during long polling. Worker Gateway routes expose registration, heartbeat, claim, renewal, result upload, completion, and failure. Services own state changes; routes own HTTP validation and authorization boundaries.
 
 ### `auth/`
 
-Human and Producer authentication primitives and services. Passwords use Argon2id; opaque session, CSRF, and Producer API tokens are generated cryptographically; and only token hashes are persisted. Producer keys are scoped, expiring, revocable, and disclosed only once. The CLI creates initial users without placing passwords in shell history.
+Human, Producer, and Worker authentication primitives. Passwords use Argon2id. Opaque session, CSRF, Producer API, Worker enrollment, and Worker Agent tokens are generated cryptographically; PostgreSQL stores only hashes. Enrollments are short-lived and single-use. Agent credentials expire, rotate on re-enrollment, can be revoked, and are bound to one owner, Worker ID, Job Type, and queue.
 
 ### `domain/`
 
@@ -54,7 +54,7 @@ Core concepts and rules: job entities, statuses, state transitions, user roles, 
 
 ### `persistence/`
 
-SQLAlchemy models, database sessions, migrations integration, and repositories for users, role assignments, browser sessions, Producer credentials, versioned job types, jobs, attempts, workers, results, and durable dead-letter records. Job rows retain immutable `job_type_id`, `publisher_id`, and `producer_id` ownership snapshots, while each Worker Agent references its owning user. Producer-scoped idempotency and the Job Type-to-Publisher relationship are enforced by PostgreSQL.
+SQLAlchemy models, database sessions, migrations, and repositories for users, roles, browser sessions, Producer credentials, Worker enrollments and credentials, Job Types, jobs, attempts, workers, results, and dead letters. Job rows retain immutable ownership snapshots. Worker credentials link an owned agent to the exact enrolled Job Type. Producer idempotency and Publisher ownership are enforced by PostgreSQL.
 
 ### `queueing/`
 

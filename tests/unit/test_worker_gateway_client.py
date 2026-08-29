@@ -26,25 +26,31 @@ def test_client_registers_and_heartbeats_with_bearer_token():
     def handler(request):
         requests.append(request)
         if request.url.path.endswith("/register"):
-            return httpx.Response(201, json={})
+            return httpx.Response(
+                201,
+                json={
+                    "worker_id": "worker-1",
+                    "capabilities": ["generate_report"],
+                    "queue": "reports",
+                    "worker_token": "agent-secret",
+                    "token_expires_at": "2026-08-29T12:00:00+00:00",
+                },
+            )
         return httpx.Response(200, json={})
 
     client = make_client(handler)
     try:
-        client.register("worker-1", ["generate_report"])
+        registration = client.register("worker-1")
         assert client.heartbeat("worker-1") is True
     finally:
         client.close()
 
     assert len(requests) == 2
-    assert all(
-        request.headers["authorization"] == "Bearer worker-secret"
-        for request in requests
-    )
-    assert json.loads(requests[0].content) == {
-        "worker_id": "worker-1",
-        "capabilities": ["generate_report"],
-    }
+    assert registration.capabilities == ("generate_report",)
+    assert registration.queue == "reports"
+    assert requests[0].headers["authorization"] == "Bearer worker-secret"
+    assert requests[1].headers["authorization"] == "Bearer agent-secret"
+    assert json.loads(requests[0].content) == {"worker_id": "worker-1"}
 
 
 def test_client_claims_and_parses_gateway_assignment():
