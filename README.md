@@ -199,6 +199,22 @@ curl 'http://localhost:8000/producer/analytics?publisher_id=<uuid>' \
 
 Both endpoints are always restricted to jobs submitted by that Producer. Lists can be narrowed by Publisher, Job Type, status, and creation window. Analytics include exact lifecycle totals and identify the Publisher for each Job Type breakdown. Use `GET /jobs/{job_id}` for the complete authorized payload, result, error, and attempt history.
 
+## Worker dashboard data
+
+An authenticated Worker user can inspect current work across owned agents:
+
+```text
+GET /worker-management/assignments?worker_id=<agent-id>
+```
+
+Execution history is cursor paginated and filterable:
+
+```text
+GET /worker-management/attempts?status=FAILED&job_type_id=<uuid>&limit=50
+```
+
+These dashboard routes expose safe assignment metadata, attempt outcomes, errors, and durations. They never return job payloads, result references, lease tokens, Worker credentials, or another user's agents. Execution payloads remain available only to the assigned Worker Agent through the Worker Gateway.
+
 ## Operational metrics
 
 The API exposes a private Prometheus endpoint using a separate token:

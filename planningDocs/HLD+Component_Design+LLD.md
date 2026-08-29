@@ -583,7 +583,11 @@ The Publisher dashboard uses `GET /publisher/jobs` for keyset-paginated job summ
 
 The Producer dashboard uses the same response model through `GET /producer/jobs` and `GET /producer/analytics`, but every query begins with the authenticated `producer_id`. It can filter by Publisher, Job Type, status, and creation window. A browser session or a Producer API key carrying `jobs:read-own` may read these endpoints; neither can widen the ownership predicate.
 
-Dashboard pagination orders by `(created_at, job_id)` descending and carries that boundary in an opaque cursor. PostgreSQL indexes Publisher/time, Publisher/status, Producer/time, and Producer/status access paths. This avoids increasingly expensive offsets and prevents another user's rows from entering either list or aggregate results.
+The Worker dashboard uses `GET /worker-management/assignments` for current work and `GET /worker-management/attempts` for execution history. Both join each job or attempt through a Worker Agent whose immutable `owner_user_id` matches the authenticated Worker user. Assignment pagination uses the active attempt's `started_at`; history can be filtered by agent, Job Type, status, and time window.
+
+Worker dashboard records intentionally omit payloads, results, lease tokens, and credentials. Active execution payloads remain available only to the assigned agent through its fenced Worker Gateway lease. Historical views expose safe job metadata, outcomes, errors, and durations.
+
+Dashboard pagination uses descending timestamp/ID keysets carried in opaque cursors. PostgreSQL indexes Publisher, Producer, Worker assignment, and Worker attempt access paths. This avoids increasingly expensive offsets and prevents another user's rows from entering either list or aggregate results.
 
 Worker payload access is temporary and assignment-scoped through the Worker Gateway. The dashboard shows safe job metadata and the worker's own execution record. Retaining payload or result access after execution requires an explicit job-type policy.
 

@@ -6,6 +6,7 @@ from .identities import IdentityRepository
 from .jobs import ConcurrentJobUpdate, JobRepository
 from .outbox import OutboxRepository
 from .workers import WorkerRepository
+from .worker_dashboard import WorkerDashboardRepository
 
 __all__ = [
     "ConcurrentJobUpdate",
@@ -15,4 +16,5 @@ __all__ = [
     "OutboxRepository",
     "DashboardRepository",
     "WorkerRepository",
+    "WorkerDashboardRepository",
 ]

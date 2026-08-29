@@ -260,6 +260,7 @@ class Job(Base):
         Index("ix_jobs_publisher_status", "publisher_id", "status"),
         Index("ix_jobs_producer_created_id", "producer_id", "created_at", "id"),
         Index("ix_jobs_producer_status", "producer_id", "status"),
+        Index("ix_jobs_worker_status", "worker_id", "status"),
         UniqueConstraint(
             "producer_id", "idempotency_key", name="uq_jobs_producer_idempotency_key"
         ),
@@ -440,6 +441,8 @@ class WorkerCredential(Base):
 class JobAttempt(Base):
     __tablename__ = "job_attempts"
     __table_args__ = (
+        Index("ix_job_attempts_worker_started_id", "worker_id", "started_at", "id"),
+        Index("ix_job_attempts_worker_status", "worker_id", "status"),
         UniqueConstraint("lease_token", name="uq_job_attempts_lease_token"),
     )
 

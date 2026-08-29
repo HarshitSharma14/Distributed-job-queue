@@ -159,6 +159,18 @@ def require_producer_dashboard_principal(
     return principal
 
 
+def require_worker_dashboard_principal(
+    principal: Annotated[AuthenticatedPrincipal, Depends(require_current_principal)],
+) -> AuthenticatedPrincipal:
+    if UserRole.WORKER not in principal.roles:
+        raise APIError(
+            status_code=status.HTTP_403_FORBIDDEN,
+            code="WORKER_ROLE_REQUIRED",
+            message="Worker role required",
+        )
+    return principal
+
+
 def require_publisher_write_principal(
     request: Request,
     principal: Annotated[AuthenticatedPrincipal, Depends(require_publisher_principal)],

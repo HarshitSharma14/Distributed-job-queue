@@ -75,6 +75,8 @@ Publisher dashboard totals are computed directly in PostgreSQL under a mandatory
 
 Producer dashboard queries reuse the same service and repository contracts under a mandatory `producer_id` predicate. Matching Producer/time and Producer/status indexes support its list and aggregate paths. Browser sessions and scoped opaque API keys share authorization logic, but raw keys remain hash-only and revocable.
 
+Worker dashboard queries join jobs and attempts through `workers.owner_user_id`. Composite Worker/status and Worker/attempt-time indexes support active assignments and cursor-paginated history. Active assignment order uses the current attempt's immutable start time rather than lease-renewal timestamps.
+
 ---
 
 # 3. Queue Technology
