@@ -4,15 +4,25 @@ import base64
 import binascii
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
 from distributed_job_queue.api.admin_schemas import (
+    AdminOverviewResponse,
     AdminQueueListResponse,
     AdminQueueSummary,
     AdminWorkerListResponse,
     AdminWorkerSummary,
+    OperationalTrendPoint,
+    OperationalTrendSeries,
+    OperationalTrendsResponse,
+)
+from distributed_job_queue.api.dashboard_services import get_dashboard_analytics
+from distributed_job_queue.common.prometheus import (
+    TREND_WINDOWS,
+    PrometheusQueryClient,
+    PrometheusQueryError,
 )
 from distributed_job_queue.domain.job import JobStatus
 from distributed_job_queue.persistence.repositories.admin_dashboard import (
@@ -20,6 +30,7 @@ from distributed_job_queue.persistence.repositories.admin_dashboard import (
     AdminWorkerCursor,
     AdminWorkerFilters,
 )
+from distributed_job_queue.persistence.repositories.dashboard import DashboardJobFilters
 from distributed_job_queue.queueing import RedisQueue
 
 logger = logging.getLogger(__name__)
@@ -27,6 +38,77 @@ logger = logging.getLogger(__name__)
 
 class InvalidAdminDashboardFilter(ValueError):
     """Raised when an Admin dashboard cursor is malformed."""
+
+
+def get_admin_overview(
+    session: Session,
+    prometheus: PrometheusQueryClient | None,
+    *,
+    admin_id: str,
+    window: str,
+    now: datetime | None = None,
+) -> AdminOverviewResponse:
+    """Combine exact PostgreSQL totals with global operational trends."""
+
+    end = now or datetime.now(timezone.utc)
+    definition = TREND_WINDOWS[window]
+    exact = get_dashboard_analytics(
+        session,
+        owner="admin",
+        owner_id=admin_id,
+        filters=DashboardJobFilters(),
+    )
+    if prometheus is None:
+        operational = OperationalTrendsResponse(
+            available=False,
+            unavailable_reason="not_configured",
+            window=window,
+            start=end - definition.duration,
+            end=end,
+            step_seconds=definition.step_seconds,
+            series=[],
+        )
+    else:
+        try:
+            result = prometheus.dashboard_trends(window, end)
+            operational = OperationalTrendsResponse(
+                available=True,
+                unavailable_reason=None,
+                window=window,
+                start=result.start,
+                end=result.end,
+                step_seconds=result.step_seconds,
+                series=[
+                    OperationalTrendSeries(
+                        metric=series.key,
+                        unit=series.unit,
+                        labels=series.labels,
+                        points=[
+                            OperationalTrendPoint(
+                                timestamp=point.timestamp,
+                                value=point.value,
+                            )
+                            for point in series.points
+                        ],
+                    )
+                    for series in result.series
+                ],
+            )
+        except (PrometheusQueryError, OSError):
+            logger.exception(
+                "Admin Prometheus trend query failed",
+                extra={"event": "admin.operational_trends.query_failed"},
+            )
+            operational = OperationalTrendsResponse(
+                available=False,
+                unavailable_reason="temporarily_unavailable",
+                window=window,
+                start=end - definition.duration,
+                end=end,
+                step_seconds=definition.step_seconds,
+                series=[],
+            )
+    return AdminOverviewResponse(exact=exact, operational=operational)
 
 
 def list_admin_workers(

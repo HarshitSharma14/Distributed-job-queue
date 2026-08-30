@@ -36,6 +36,10 @@ def test_load_settings_uses_development_defaults():
     assert settings.handler_trusted_public_keys == "{}"
     assert settings.metrics_token == "dev-metrics-token"
     assert settings.metrics_port == 0
+    assert settings.prometheus_url is None
+    assert settings.prometheus_username is None
+    assert settings.prometheus_password is None
+    assert settings.prometheus_timeout_seconds == 5
     assert settings.max_attempts == 5
     assert settings.outbox_batch_size == 100
     assert settings.outbox_poll_interval_seconds == 1
@@ -58,6 +62,10 @@ def test_load_settings_parses_environment_values(monkeypatch):
     monkeypatch.setenv("WORKER_CREDENTIAL_HOURS", "48")
     monkeypatch.setenv("METRICS_TOKEN", "test-metrics-token")
     monkeypatch.setenv("METRICS_PORT", "9100")
+    monkeypatch.setenv("PROMETHEUS_URL", "https://prometheus.example.com")
+    monkeypatch.setenv("PROMETHEUS_USERNAME", "tenant")
+    monkeypatch.setenv("PROMETHEUS_PASSWORD", "query-secret")
+    monkeypatch.setenv("PROMETHEUS_TIMEOUT_SECONDS", "8")
     monkeypatch.setenv("WORKER_GATEWAY_URL", "https://queue.example.com")
     monkeypatch.setenv("RESULT_UPLOAD_URL_SECONDS", "120")
     monkeypatch.setenv("MINIO_HANDLER_BUCKET", "test-handlers")
@@ -94,6 +102,10 @@ def test_load_settings_parses_environment_values(monkeypatch):
     assert settings.worker_credential_hours == 48
     assert settings.metrics_token == "test-metrics-token"
     assert settings.metrics_port == 9100
+    assert settings.prometheus_url == "https://prometheus.example.com"
+    assert settings.prometheus_username == "tenant"
+    assert settings.prometheus_password == "query-secret"
+    assert settings.prometheus_timeout_seconds == 8
     assert settings.worker_gateway_url == "https://queue.example.com"
     assert settings.result_upload_url_seconds == 120
     assert settings.minio_handler_bucket == "test-handlers"
@@ -144,4 +156,13 @@ def test_load_settings_requires_metrics_token_outside_development(monkeypatch):
     monkeypatch.delenv("METRICS_TOKEN", raising=False)
 
     with pytest.raises(ConfigurationError, match="METRICS_TOKEN"):
+        load_settings()
+
+
+def test_load_settings_rejects_partial_prometheus_credentials(monkeypatch):
+    monkeypatch.setenv("PROMETHEUS_URL", "https://prometheus.example.com")
+    monkeypatch.setenv("PROMETHEUS_USERNAME", "tenant")
+    monkeypatch.delenv("PROMETHEUS_PASSWORD", raising=False)
+
+    with pytest.raises(ConfigurationError, match="must be set together"):
         load_settings()

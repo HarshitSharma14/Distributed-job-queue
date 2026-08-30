@@ -1,7 +1,7 @@
 """Global, read-only Admin control-plane routes."""
 
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
@@ -9,11 +9,13 @@ from sqlalchemy.orm import Session
 
 from distributed_job_queue.api.admin_schemas import (
     AdminDeadLetterListResponse,
+    AdminOverviewResponse,
     AdminQueueListResponse,
     AdminWorkerListResponse,
 )
 from distributed_job_queue.api.admin_services import (
     InvalidAdminDashboardFilter,
+    get_admin_overview,
     get_admin_queues,
     list_admin_workers,
 )
@@ -27,10 +29,15 @@ from distributed_job_queue.api.dashboard_services import (
     get_dashboard_analytics,
     list_dashboard_jobs,
 )
-from distributed_job_queue.api.dependencies import get_redis_queue, get_session
+from distributed_job_queue.api.dependencies import (
+    get_prometheus_client,
+    get_redis_queue,
+    get_session,
+)
 from distributed_job_queue.api.errors import APIError
 from distributed_job_queue.api.schemas import NAME_PATTERN
 from distributed_job_queue.auth.service import AuthenticatedPrincipal
+from distributed_job_queue.common.prometheus import PrometheusQueryClient
 from distributed_job_queue.domain.job import JobStatus
 from distributed_job_queue.domain.worker import WorkerStatus
 from distributed_job_queue.persistence.repositories.admin_dashboard import (
@@ -40,6 +47,23 @@ from distributed_job_queue.persistence.repositories.dashboard import DashboardJo
 from distributed_job_queue.queueing import RedisQueue
 
 router = APIRouter(prefix="/admin", tags=["admin-dashboard"])
+
+
+@router.get("/overview", response_model=AdminOverviewResponse)
+def admin_overview(
+    principal: Annotated[AuthenticatedPrincipal, Depends(require_admin_principal)],
+    session: Annotated[Session, Depends(get_session)],
+    prometheus: Annotated[
+        PrometheusQueryClient | None, Depends(get_prometheus_client)
+    ],
+    window: Literal["1h", "6h", "24h", "7d"] = "24h",
+) -> AdminOverviewResponse:
+    return get_admin_overview(
+        session,
+        prometheus,
+        admin_id=principal.user_id,
+        window=window,
+    )
 
 
 @router.get("/jobs", response_model=DashboardJobListResponse)

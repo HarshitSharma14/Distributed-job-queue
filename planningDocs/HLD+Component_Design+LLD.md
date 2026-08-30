@@ -589,6 +589,10 @@ Worker dashboard records intentionally omit payloads, results, lease tokens, and
 
 The Admin control plane uses `GET /admin/jobs`, `/admin/analytics`, `/admin/workers`, `/admin/queues`, and `/admin/dead-letters`. Admin job filters span Publisher, Producer, Job Type, queue, status, and time. Worker views include ownership, capabilities, health, heartbeat, and active-job counts. Dead-letter summaries link to the existing full job-detail endpoint.
 
+`GET /admin/overview` combines the two analytics layers without making either one pretend to be the other. Its `exact` section is calculated from PostgreSQL. Its `operational` section queries an allowlisted set of PromQL expressions for submission rate, attempt outcomes, p95 execution time, queue depth, lease loss, recovery, offline Workers, and collector health over `1h`, `6h`, `24h`, or `7d`. Prometheus target labels such as `instance` and `job` are removed before the response reaches the browser.
+
+Operational Prometheus trends are Admin-only. Queue labels cannot safely enforce Publisher or Producer ownership when queues are shared, and adding user IDs as Prometheus labels would create high cardinality. Publisher and Producer views therefore continue to use exact ownership-scoped PostgreSQL analytics. If Prometheus is unconfigured or unavailable, the Admin overview still returns PostgreSQL totals and marks only its operational section unavailable.
+
 Admin queue state intentionally shows two layers together: PostgreSQL lifecycle counts as durable truth, and Redis ready/in-flight counts as temporary delivery state. Redis failure does not erase the PostgreSQL view; unavailable Redis fields are returned as unknown. Admin visibility still excludes password hashes, bearer credentials, signing secrets, infrastructure credentials, signed URLs, and lease tokens.
 
 Dashboard pagination uses descending timestamp/ID keysets carried in opaque cursors. PostgreSQL indexes Publisher, Producer, Worker assignment, and Worker attempt access paths. This avoids increasingly expensive offsets and prevents another user's rows from entering either list or aggregate results.

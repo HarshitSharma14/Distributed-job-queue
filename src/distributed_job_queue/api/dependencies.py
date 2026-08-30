@@ -10,6 +10,7 @@ from redis import Redis
 from sqlalchemy.orm import Session, sessionmaker
 
 from distributed_job_queue.common.config import load_settings
+from distributed_job_queue.common.prometheus import PrometheusQueryClient
 from distributed_job_queue.api.errors import APIError
 from distributed_job_queue.auth.worker_credentials import (
     WorkerAgentPrincipal,
@@ -70,6 +71,25 @@ def get_handler_storage() -> MinioHandlerStorage:
         settings.minio_secret_key,
         settings.minio_handler_bucket,
     )
+
+
+def get_prometheus_client() -> Iterator[PrometheusQueryClient | None]:
+    """Keep Prometheus credentials behind the Admin dashboard API."""
+
+    settings = load_settings()
+    if settings.prometheus_url is None:
+        yield None
+        return
+    client = PrometheusQueryClient(
+        settings.prometheus_url,
+        timeout_seconds=settings.prometheus_timeout_seconds,
+        username=settings.prometheus_username,
+        password=settings.prometheus_password,
+    )
+    try:
+        yield client
+    finally:
+        client.close()
 
 
 def require_worker_enrollment(

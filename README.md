@@ -222,6 +222,7 @@ An authenticated Admin browser session can access:
 ```text
 GET /admin/jobs
 GET /admin/analytics
+GET /admin/overview?window=24h
 GET /admin/workers
 GET /admin/queues
 GET /admin/dead-letters
@@ -230,6 +231,8 @@ GET /admin/dead-letters
 Admin jobs support Publisher, Producer, Job Type, queue, status, time, and cursor filters. Worker records include owner, capabilities, health, heartbeat, and active-job count. Queue records show PostgreSQL lifecycle totals separately from Redis ready and in-flight depth. Dead-letter summaries link to `GET /jobs/{job_id}` for complete payload, result, error, and attempt history.
 
 Admin responses still never reveal passwords, bearer tokens, credential hashes, signing secrets, signed URLs, infrastructure credentials, or lease tokens.
+
+`GET /admin/overview` returns exact global PostgreSQL analytics together with Admin-only operational Prometheus trends. Supported windows are `1h`, `6h`, `24h`, and `7d`. The operational series cover submission rate, attempt outcomes, p95 execution latency, queue depth, lease losses, recovery, offline Workers, and state-collector health. If Prometheus is unavailable, exact PostgreSQL totals still succeed and `operational.available` is `false`.
 
 ## Operational metrics
 
@@ -241,5 +244,7 @@ curl http://localhost:8000/metrics \
 ```
 
 Set `METRICS_PORT` to a non-zero internal port when running the scheduler, recovery monitor, or Outbox Publisher as independently scraped processes. Keep these ports private. Publisher-specific dashboard totals come from PostgreSQL; Prometheus is used for operational rates, latency, queue depth, and health trends.
+
+Set `PROMETHEUS_URL` on the API to enable Admin trend queries. A hosted Prometheus-compatible service may also use `PROMETHEUS_USERNAME` and `PROMETHEUS_PASSWORD`; configure both or neither. PromQL is fixed by the backend, queries run with a bounded timeout, and browser clients never receive Prometheus credentials or direct query access.
 
 The response includes the current status, active worker and lease expiry when applicable, result reference, error, and ordered attempt history. Internal fencing tokens are never exposed.

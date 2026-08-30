@@ -68,6 +68,10 @@ class Settings:
     handler_trusted_public_keys: str
     metrics_token: str
     metrics_port: int
+    prometheus_url: str | None
+    prometheus_username: str | None
+    prometheus_password: str | None
+    prometheus_timeout_seconds: int
     worker_gateway_url: str
     worker_enrollment_token: str | None
     worker_credential_hours: int
@@ -96,6 +100,17 @@ def load_settings() -> Settings:
         if environment != "development":
             raise ConfigurationError("METRICS_TOKEN is required outside development")
         metrics_token = "dev-metrics-token"
+    prometheus_url = os.getenv("PROMETHEUS_URL") or None
+    prometheus_username = os.getenv("PROMETHEUS_USERNAME") or None
+    prometheus_password = os.getenv("PROMETHEUS_PASSWORD") or None
+    if bool(prometheus_username) != bool(prometheus_password):
+        raise ConfigurationError(
+            "PROMETHEUS_USERNAME and PROMETHEUS_PASSWORD must be set together"
+        )
+    if (prometheus_username or prometheus_password) and prometheus_url is None:
+        raise ConfigurationError(
+            "PROMETHEUS_URL is required when Prometheus credentials are configured"
+        )
 
     return Settings(
         environment=environment,
@@ -156,6 +171,12 @@ def load_settings() -> Settings:
         ),
         metrics_token=metrics_token,
         metrics_port=_get_int("METRICS_PORT", 0, minimum=0),
+        prometheus_url=prometheus_url,
+        prometheus_username=prometheus_username,
+        prometheus_password=prometheus_password,
+        prometheus_timeout_seconds=_get_int(
+            "PROMETHEUS_TIMEOUT_SECONDS", 5, minimum=1
+        ),
         worker_gateway_url=os.getenv(
             "WORKER_GATEWAY_URL", "http://localhost:8000"
         ),

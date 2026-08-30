@@ -1,10 +1,14 @@
 """Global Admin dashboard response contracts."""
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
 
-from distributed_job_queue.api.dashboard_schemas import DashboardJobSummary
+from distributed_job_queue.api.dashboard_schemas import (
+    DashboardAnalyticsResponse,
+    DashboardJobSummary,
+)
 from distributed_job_queue.domain.worker import WorkerStatus
 
 
@@ -40,3 +44,31 @@ class AdminQueueSummary(BaseModel):
 class AdminQueueListResponse(BaseModel):
     redis_available: bool
     items: list[AdminQueueSummary]
+
+
+class OperationalTrendPoint(BaseModel):
+    timestamp: datetime
+    value: float | None
+
+
+class OperationalTrendSeries(BaseModel):
+    metric: str
+    unit: str
+    labels: dict[str, str]
+    points: list[OperationalTrendPoint]
+
+
+class OperationalTrendsResponse(BaseModel):
+    available: bool
+    unavailable_reason: Literal["not_configured", "temporarily_unavailable"] | None
+    source: Literal["prometheus"] = "prometheus"
+    window: Literal["1h", "6h", "24h", "7d"]
+    start: datetime
+    end: datetime
+    step_seconds: int
+    series: list[OperationalTrendSeries]
+
+
+class AdminOverviewResponse(BaseModel):
+    exact: DashboardAnalyticsResponse
+    operational: OperationalTrendsResponse

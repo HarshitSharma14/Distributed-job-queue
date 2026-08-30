@@ -5,8 +5,8 @@ This is the working checklist for implementation. We complete and verify each it
 ## Current focus
 
 - **Current phase:** Phase 7.5 — Role-scoped dashboard product
-- **Next step:** Combine PostgreSQL dashboard analytics with Prometheus operational trends
-- **Current milestone:** Admin has global jobs, exact analytics, Worker health, PostgreSQL/Redis queue state, and dead-letter visibility without access to recoverable secrets; all 166 tests pass with no Alembic drift
+- **Next step:** Build the Admin, Publisher, Producer, and Worker dashboard pages
+- **Current milestone:** Admin overview combines exact PostgreSQL totals with safe, allowlisted Prometheus trends and remains available when Prometheus fails; all 171 tests pass with no Alembic drift
 
 ## Phase 1 — Project foundation
 
@@ -122,7 +122,7 @@ This is the working checklist for implementation. We complete and verify each it
 - [x] Add producer-scoped job listing and analytics APIs
 - [x] Add worker-scoped assignment and attempt-history APIs
 - [x] Add global Admin job, worker, queue, and dead-letter APIs
-- [ ] Combine PostgreSQL analytics with Prometheus trends
+- [x] Combine PostgreSQL analytics with Prometheus trends
 - [ ] Build Admin, Publisher, Producer, and Worker dashboard pages
 
 ## Phase 8 — Running the system
@@ -200,3 +200,4 @@ This is the working checklist for implementation. We complete and verify each it
 | 2026-08-29 | Producer dashboard data APIs added | Generalized dashboard queries across ownership types; added Producer job lists, exact analytics, Publisher/Job Type/status/time filters, scoped browser and API-key access, Producer indexes in migration `0016`, and cross-Producer isolation coverage; all 158 tests pass with no Alembic drift |
 | 2026-08-30 | Worker dashboard data APIs added | Added owned active assignments, cursor-paginated attempt history, agent/Job Type/status/time filters, safe outcome/error/duration details, strict payload/result/token exclusion, Worker indexes in migration `0017`, and cross-owner isolation coverage; all 161 tests pass with no Alembic drift |
 | 2026-08-30 | Admin control-plane data APIs added | Added global cursor-paginated jobs, exact analytics, Worker ownership/health/activity, durable PostgreSQL plus temporary Redis queue state, graceful Redis degradation, dedicated dead-letter visibility, Admin-only authorization, safe redaction, and migration `0018` query indexes; all 166 tests pass with no Alembic drift |
+| 2026-08-30 | Admin operational overview added | Combined exact PostgreSQL totals with Admin-only Prometheus range trends, fixed low-cardinality PromQL, bounded concurrent queries, private-label filtering, optional hosted-service credentials, and graceful Prometheus degradation; all 171 tests pass with no Alembic drift |

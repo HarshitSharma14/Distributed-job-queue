@@ -322,10 +322,13 @@ API Errors:          Stable coded JSON envelope with request IDs
 Metrics Client:      Prometheus Python client
 Metrics Storage:     Grafana Cloud Free or local Prometheus
 Dashboard Analytics: PostgreSQL exact data + Prometheus operational trends
+Prometheus Query:    Backend-only HTTP API with fixed PromQL allowlist
 Password Hashing:    Argon2id via argon2-cffi
 Browser Auth:        Opaque PostgreSQL sessions + secure cookies + CSRF tokens
 Producer Auth:       Hashed, scoped, expiring, revocable opaque API keys
 ```
+
+The API queries Prometheus only for the Admin overview. Queries execute concurrently with a bounded timeout and expose only approved queue, outcome, operation, and source labels. `PROMETHEUS_URL` enables the integration; optional username/password values support a hosted Prometheus-compatible API and must be configured together. Dashboard browsers never receive the query credentials or direct Prometheus access.
 
 ## Final architecture with technologies
 

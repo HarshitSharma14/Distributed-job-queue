@@ -9,10 +9,17 @@ from sqlalchemy.orm import Session
 
 from distributed_job_queue.api.app import app
 from distributed_job_queue.api.dependencies import get_redis_queue, get_session
+from distributed_job_queue.api.dependencies import get_prometheus_client
 from distributed_job_queue.auth.security import hash_password
 from distributed_job_queue.domain.identity import UserRole
 from distributed_job_queue.domain.job import JobStatus
 from distributed_job_queue.domain.worker import WorkerStatus
+from distributed_job_queue.common.prometheus import (
+    PrometheusQueryError,
+    TrendPoint,
+    TrendResult,
+    TrendSeries,
+)
 from distributed_job_queue.persistence.database import engine
 from distributed_job_queue.persistence.models import Job, User, Worker
 from distributed_job_queue.persistence.repositories import IdentityRepository, JobRepository
@@ -34,6 +41,29 @@ class FakeRedisQueue:
 class UnavailableRedisQueue:
     def queue_size(self, queue: str) -> int:
         raise ConnectionError(f"Redis unavailable for {queue}")
+
+
+class FakePrometheusClient:
+    def dashboard_trends(self, window: str, end: datetime) -> TrendResult:
+        assert window in {"1h", "6h", "24h", "7d"}
+        return TrendResult(
+            start=end - timedelta(hours=1),
+            end=end,
+            step_seconds=60,
+            series=[
+                TrendSeries(
+                    key="job_submission_rate",
+                    unit="jobs_per_second",
+                    labels={"queue": "reports"},
+                    points=[TrendPoint(timestamp=end, value=0.5)],
+                )
+            ],
+        )
+
+
+class UnavailablePrometheusClient:
+    def dashboard_trends(self, window: str, end: datetime) -> TrendResult:
+        raise PrometheusQueryError("Prometheus unavailable")
 
     def inflight_size(self, queue: str) -> int:
         raise ConnectionError(f"Redis unavailable for {queue}")
@@ -143,6 +173,7 @@ def admin_dashboard_context():
 
     app.dependency_overrides[get_session] = override_session
     app.dependency_overrides[get_redis_queue] = lambda: FakeRedisQueue()
+    app.dependency_overrides[get_prometheus_client] = lambda: FakePrometheusClient()
     try:
         yield AdminDashboardContext(
             session=session,
@@ -217,6 +248,94 @@ def test_admin_jobs_and_analytics_are_global_filterable_and_paginated(
             assert body["status_counts"]["RUNNING"] == 1
             assert body["status_counts"]["DEAD_LETTERED"] == 1
             assert body["status_counts"]["COMPLETED"] == 1
+
+    asyncio.run(scenario())
+
+
+def test_admin_overview_combines_exact_totals_with_operational_trends(
+    admin_dashboard_context,
+):
+    context = admin_dashboard_context
+
+    async def scenario():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://testserver",
+        ) as client:
+            await login(client, context.admin)
+            response = await client.get("/admin/overview", params={"window": "1h"})
+
+            assert response.status_code == 200
+            body = response.json()
+            assert body["exact"]["total_jobs"] == 4
+            assert body["exact"]["total_attempts"] == 5
+            assert body["operational"]["available"] is True
+            assert body["operational"]["window"] == "1h"
+            assert body["operational"]["series"] == [
+                {
+                    "metric": "job_submission_rate",
+                    "unit": "jobs_per_second",
+                    "labels": {"queue": "reports"},
+                    "points": [
+                        {
+                            "timestamp": body["operational"]["end"],
+                            "value": 0.5,
+                        }
+                    ],
+                }
+            ]
+
+    asyncio.run(scenario())
+
+
+def test_admin_overview_keeps_exact_totals_without_prometheus(
+    admin_dashboard_context,
+):
+    context = admin_dashboard_context
+    app.dependency_overrides[get_prometheus_client] = lambda: None
+
+    async def scenario():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://testserver",
+        ) as client:
+            await login(client, context.admin)
+            response = await client.get("/admin/overview")
+
+            assert response.status_code == 200
+            body = response.json()
+            assert body["exact"]["total_jobs"] == 4
+            assert body["operational"]["available"] is False
+            assert body["operational"]["unavailable_reason"] == "not_configured"
+            assert body["operational"]["series"] == []
+
+    asyncio.run(scenario())
+
+
+def test_admin_overview_keeps_exact_totals_when_prometheus_query_fails(
+    admin_dashboard_context,
+):
+    context = admin_dashboard_context
+    app.dependency_overrides[
+        get_prometheus_client
+    ] = lambda: UnavailablePrometheusClient()
+
+    async def scenario():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://testserver",
+        ) as client:
+            await login(client, context.admin)
+            response = await client.get("/admin/overview")
+
+            assert response.status_code == 200
+            body = response.json()
+            assert body["exact"]["total_jobs"] == 4
+            assert body["operational"]["available"] is False
+            assert (
+                body["operational"]["unavailable_reason"]
+                == "temporarily_unavailable"
+            )
 
     asyncio.run(scenario())
 
@@ -308,6 +427,7 @@ def test_admin_dashboard_requires_admin_browser_session(admin_dashboard_context)
         ) as publisher_client:
             await login(publisher_client, context.publisher_only)
             for path in (
+                "/admin/overview",
                 "/admin/jobs",
                 "/admin/analytics",
                 "/admin/workers",

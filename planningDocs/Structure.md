@@ -42,7 +42,7 @@ Main application package. Production code lives here.
 
 ### `api/`
 
-FastAPI application and process runner. Authentication routes expose human sessions and Producer API keys. Job Type routes own Publisher definitions, immutable successor creation, bundle verification, and Admin-only signed approval or rejection. `publisher_routes.py` and `producer_routes.py` expose role-specific dashboard boundaries; `dashboard_services.py` and `dashboard_schemas.py` provide their shared pagination and analytics contracts. Worker management routes issue one-time enrollments and list or revoke owned agents, while `worker_dashboard_routes.py` and its matching service/schema modules expose owned assignments and attempt history. `admin_routes.py`, `admin_services.py`, and `admin_schemas.py` expose global safe job, analytics, Worker, queue, and dead-letter views. `dependencies.py` authenticates registrations and per-agent requests without holding a database connection during long polling. Worker Gateway routes expose registration, heartbeat, claim, renewal, result upload, completion, and failure. Services own state changes; routes own HTTP validation and authorization boundaries.
+FastAPI application and process runner. Authentication routes expose human sessions and Producer API keys. Job Type routes own Publisher definitions, immutable successor creation, bundle verification, and Admin-only signed approval or rejection. `publisher_routes.py` and `producer_routes.py` expose role-specific dashboard boundaries; `dashboard_services.py` and `dashboard_schemas.py` provide their shared pagination and analytics contracts. Worker management routes issue one-time enrollments and list or revoke owned agents, while `worker_dashboard_routes.py` and its matching service/schema modules expose owned assignments and attempt history. `admin_routes.py`, `admin_services.py`, and `admin_schemas.py` expose global safe job, analytics, Worker, queue, dead-letter, and combined PostgreSQL/Prometheus overview views. `dependencies.py` owns database, queue, storage, Prometheus-query, and authentication boundaries without holding a database connection during Worker long polling. Worker Gateway routes expose registration, heartbeat, claim, renewal, result upload, completion, and failure. Services own state changes; routes own HTTP validation and authorization boundaries.
 
 ### `auth/`
 
@@ -82,7 +82,7 @@ PostgreSQL-authoritative health and recovery process. It marks workers offline a
 
 ### `common/`
 
-Shared configuration, structured logging, and operational metrics. `logging.py` owns JSON formatting, request context, process configuration, and sensitive-value redaction. `metrics.py` owns low-cardinality counters, histograms, current-state collectors, and private process metric servers. API-specific errors, HTTP correlation, and protected scraping remain under `api/`.
+Shared configuration, structured logging, and operational metrics. `logging.py` owns JSON formatting, request context, process configuration, and sensitive-value redaction. `metrics.py` owns low-cardinality counters, histograms, current-state collectors, and private process metric servers. `prometheus.py` owns the fixed dashboard PromQL allowlist, concurrent range queries, response validation, and removal of private target labels. API-specific errors, HTTP correlation, protected scraping, and Admin authorization remain under `api/`.
 
 ## Test structure
 
