@@ -43,6 +43,7 @@ class Settings:
     debug: bool
     api_host: str
     api_port: int
+    frontend_dist_dir: str
     auth_session_hours: int
     auth_cookie_secure: bool
     database_url: str
@@ -117,6 +118,7 @@ def load_settings() -> Settings:
         debug=_get_bool("APP_DEBUG", False),
         api_host=os.getenv("API_HOST", "0.0.0.0"),
         api_port=_get_int("API_PORT", 8000, minimum=1),
+        frontend_dist_dir=os.getenv("FRONTEND_DIST_DIR", "frontend/dist"),
         auth_session_hours=_get_int("AUTH_SESSION_HOURS", 12, minimum=1),
         auth_cookie_secure=_get_bool(
             "AUTH_COOKIE_SECURE", environment != "development"

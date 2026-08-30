@@ -11,6 +11,7 @@ def test_load_settings_uses_development_defaults():
     assert settings.environment == "development"
     assert settings.api_host == "0.0.0.0"
     assert settings.api_port == 8000
+    assert settings.frontend_dist_dir == "frontend/dist"
     assert settings.auth_session_hours == 12
     assert settings.auth_cookie_secure is False
     assert settings.database_url.startswith("postgresql+")
@@ -54,6 +55,7 @@ def test_load_settings_parses_environment_values(monkeypatch):
     monkeypatch.setenv("APP_DEBUG", "true")
     monkeypatch.setenv("API_HOST", "127.0.0.1")
     monkeypatch.setenv("API_PORT", "9000")
+    monkeypatch.setenv("FRONTEND_DIST_DIR", "/srv/relay/frontend")
     monkeypatch.setenv("AUTH_SESSION_HOURS", "24")
     monkeypatch.setenv("AUTH_COOKIE_SECURE", "true")
     monkeypatch.setenv("JOB_LEASE_SECONDS", "90")
@@ -94,6 +96,7 @@ def test_load_settings_parses_environment_values(monkeypatch):
     assert settings.debug is True
     assert settings.api_host == "127.0.0.1"
     assert settings.api_port == 9000
+    assert settings.frontend_dist_dir == "/srv/relay/frontend"
     assert settings.auth_session_hours == 24
     assert settings.auth_cookie_secure is True
     assert settings.job_lease_seconds == 90

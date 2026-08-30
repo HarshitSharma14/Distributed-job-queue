@@ -297,6 +297,36 @@ Tests must cover state transitions, atomic claims, retries, expired leases, dupl
 
 ---
 
+# 10. Dashboard Frontend
+
+## Option A: Server-rendered templates
+
+**Pros:** one Python stack and simple deployment.
+
+**Cons:** interactive charts, background refresh, role switching, and client-side tables require increasing amounts of custom JavaScript.
+
+## Option B: Next.js
+
+**Pros:** mature React framework with server rendering and full-stack conventions.
+
+**Cons:** server rendering is unnecessary for an authenticated operations dashboard and adds another runtime to deployment.
+
+## Option C: React and TypeScript with Vite
+
+**Pros:** typed API contracts, fast development, static production output, route-level code splitting, and a strong dashboard ecosystem.
+
+**Cons:** introduces a Node-based build step and client-side application state.
+
+## Decision
+
+### Choose: React, TypeScript, and Vite
+
+One SPA serves Admin, Publisher, Producer, and Worker routes. React Router enforces role-aware navigation, TanStack Query owns remote state and refresh intervals, Tailwind CSS plus reusable components own styling, and Recharts renders operational trends. Vitest and Testing Library cover frontend behavior.
+
+Vite builds static assets under `frontend/dist`. FastAPI serves that directory at `/app`, keeping browser sessions, CSRF cookies, and API requests same-origin without a second production web server. Development uses Vite's API proxy. Role pages are lazy-loaded so charting code does not increase the initial login bundle.
+
+---
+
 # Final Technology Stack Locked
 
 ```text
@@ -326,6 +356,13 @@ Prometheus Query:    Backend-only HTTP API with fixed PromQL allowlist
 Password Hashing:    Argon2id via argon2-cffi
 Browser Auth:        Opaque PostgreSQL sessions + secure cookies + CSRF tokens
 Producer Auth:       Hashed, scoped, expiring, revocable opaque API keys
+Dashboard:           React + TypeScript + Vite SPA
+Dashboard Routing:   React Router
+Dashboard Data:      TanStack Query
+Dashboard UI:        Tailwind CSS + reusable component primitives
+Dashboard Charts:    Recharts
+Frontend Testing:    Vitest + Testing Library
+Frontend Serving:    FastAPI `/app` same-origin static mount
 ```
 
 The API queries Prometheus only for the Admin overview. Queries execute concurrently with a bounded timeout and expose only approved queue, outcome, operation, and source labels. `PROMETHEUS_URL` enables the integration; optional username/password values support a hosted Prometheus-compatible API and must be configured together. Dashboard browsers never receive the query credentials or direct Prometheus access.

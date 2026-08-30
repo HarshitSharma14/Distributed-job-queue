@@ -7,6 +7,7 @@
 - Docker Desktop
 - Docker Compose
 - Python 3.11 or newer
+- Node.js 22 or newer for dashboard development
 
 ### Configure the environment
 
@@ -92,6 +93,26 @@ The named Docker volumes preserve local data between restarts. To remove the con
 ```bash
 docker compose down -v
 ```
+
+## Dashboard development
+
+Install and run the role-aware dashboard:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open [http://localhost:5173/app/](http://localhost:5173/app/). Vite proxies same-origin authentication and dashboard API calls to FastAPI at `http://localhost:8000`.
+
+Build production assets with:
+
+```bash
+npm run build
+```
+
+FastAPI automatically serves an available `frontend/dist` at `/app`. Set `FRONTEND_DIST_DIR` when deployment places the static bundle elsewhere. API routes remain separate from the SPA fallback.
 
 Use the `-v` option only when local data can be discarded.
 

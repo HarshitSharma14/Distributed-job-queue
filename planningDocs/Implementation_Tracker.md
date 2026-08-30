@@ -5,8 +5,8 @@ This is the working checklist for implementation. We complete and verify each it
 ## Current focus
 
 - **Current phase:** Phase 7.5 — Role-scoped dashboard product
-- **Next step:** Build the Admin, Publisher, Producer, and Worker dashboard pages
-- **Current milestone:** Admin overview combines exact PostgreSQL totals with safe, allowlisted Prometheus trends and remains available when Prometheus fails; all 171 tests pass with no Alembic drift
+- **Next step:** Add detailed Admin jobs, Workers, queues, and dead-letter screens
+- **Current milestone:** React dashboard foundation, secure browser auth, role routing, shared UI, and Admin, Publisher, Producer, and Worker overview pages are production-buildable; 172 backend tests and 3 frontend tests pass
 
 ## Phase 1 — Project foundation
 
@@ -123,6 +123,13 @@ This is the working checklist for implementation. We complete and verify each it
 - [x] Add worker-scoped assignment and attempt-history APIs
 - [x] Add global Admin job, worker, queue, and dead-letter APIs
 - [x] Combine PostgreSQL analytics with Prometheus trends
+- [x] Add React, TypeScript, Vite, Tailwind, and frontend testing foundation
+- [x] Add same-origin session restoration, CSRF requests, and protected role routing
+- [x] Add Admin, Publisher, Producer, and Worker overview pages
+- [ ] Add detailed Admin jobs, Workers, queues, and dead-letter pages
+- [ ] Add Publisher Job Type management and release pages
+- [ ] Add Producer submission and job-detail pages
+- [ ] Add Worker Agent enrollment and management pages
 - [ ] Build Admin, Publisher, Producer, and Worker dashboard pages
 
 ## Phase 8 — Running the system
@@ -201,3 +208,4 @@ This is the working checklist for implementation. We complete and verify each it
 | 2026-08-30 | Worker dashboard data APIs added | Added owned active assignments, cursor-paginated attempt history, agent/Job Type/status/time filters, safe outcome/error/duration details, strict payload/result/token exclusion, Worker indexes in migration `0017`, and cross-owner isolation coverage; all 161 tests pass with no Alembic drift |
 | 2026-08-30 | Admin control-plane data APIs added | Added global cursor-paginated jobs, exact analytics, Worker ownership/health/activity, durable PostgreSQL plus temporary Redis queue state, graceful Redis degradation, dedicated dead-letter visibility, Admin-only authorization, safe redaction, and migration `0018` query indexes; all 166 tests pass with no Alembic drift |
 | 2026-08-30 | Admin operational overview added | Combined exact PostgreSQL totals with Admin-only Prometheus range trends, fixed low-cardinality PromQL, bounded concurrent queries, private-label filtering, optional hosted-service credentials, and graceful Prometheus degradation; all 171 tests pass with no Alembic drift |
+| 2026-08-30 | Role dashboard foundation added | Added a React/TypeScript/Vite SPA, same-origin cookie and CSRF integration, protected multi-role workspaces, shared responsive UI, lazy-loaded Admin operational charts, Publisher and Producer analytics, Worker assignments and history, FastAPI `/app` serving, 3 frontend tests, and a production build |

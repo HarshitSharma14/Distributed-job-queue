@@ -597,6 +597,10 @@ Admin queue state intentionally shows two layers together: PostgreSQL lifecycle 
 
 Dashboard pagination uses descending timestamp/ID keysets carried in opaque cursors. PostgreSQL indexes Publisher, Producer, Worker assignment, and Worker attempt access paths. This avoids increasingly expensive offsets and prevents another user's rows from entering either list or aggregate results.
 
+The browser product is one role-aware SPA under `/app`. It never talks directly to PostgreSQL, Redis, MinIO, or Prometheus. It authenticates through the existing opaque session cookie, mirrors the CSRF cookie into `X-CSRF-Token` for mutations, and uses only role-authorized FastAPI endpoints. A multi-role user can switch workspaces, but each route and API independently rechecks the required role.
+
+The production frontend is static output served by FastAPI, giving one deployment and a same-origin cookie boundary. Admin, Publisher, Producer, and Worker pages load as separate browser chunks. Dashboard refresh is bounded by the type of data: active Worker assignments refresh more frequently than historical analytics.
+
 Worker payload access is temporary and assignment-scoped through the Worker Gateway. The dashboard shows safe job metadata and the worker's own execution record. Retaining payload or result access after execution requires an explicit job-type policy.
 
 ---

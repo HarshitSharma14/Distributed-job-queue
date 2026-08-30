@@ -7,3 +7,6 @@ __pycache__/
 .coverage
 htmlcov/
 .DS_Store
+frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo
