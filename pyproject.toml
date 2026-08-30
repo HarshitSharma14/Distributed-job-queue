@@ -35,6 +35,7 @@ worker-monitor = "distributed_job_queue.recovery.runner:main"
 recovery-monitor = "distributed_job_queue.recovery.runner:main"
 djq-create-user = "distributed_job_queue.auth.cli:main"
 djq-generate-handler-key = "distributed_job_queue.auth.signing_cli:main"
+djq-seed-demo = "distributed_job_queue.demo.seed:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

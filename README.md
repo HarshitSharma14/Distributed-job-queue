@@ -114,6 +114,28 @@ npm run build
 
 FastAPI automatically serves an available `frontend/dist` at `/app`. Set `FRONTEND_DIST_DIR` when deployment places the static bundle elsewhere. API routes remain separate from the SPA fallback.
 
+### Fill the local dashboards with demo data
+
+With PostgreSQL running, seed a repeatable development-only dataset:
+
+```bash
+source .venv/bin/activate
+python -m distributed_job_queue.demo.seed
+```
+
+The command is idempotent and does not modify non-demo records. It creates 40 jobs across all lifecycle states, four historical Job Types, four Workers, attempt history, and multiple owners. Log in with:
+
+```text
+Email:    demo@relay.local
+Password: relay-demo-password
+```
+
+This account has Admin, Publisher, Producer, and Worker roles. The other seeded users create cross-owner records for authorization and Admin visibility. Demo Job Types are disabled historical definitions, preventing accidental execution of synthetic handlers.
+
+### Test database isolation
+
+Pytest never uses the development `queue` database. Integration tests recreate and migrate the dedicated `queue_test` database configured by `TEST_DATABASE_URL`, whose name must end in `_test`. This preserves seeded dashboard data while keeping global Admin and recovery tests deterministic.
+
 Use the `-v` option only when local data can be discarded.
 
 ## Worker handler modules

@@ -29,6 +29,7 @@ distributed_job_queue/
 │       ├── auth/
 │       ├── common/
 │       ├── domain/
+│       ├── demo/
 │       ├── persistence/
 │       ├── publisher/
 │       ├── queueing/
@@ -65,6 +66,10 @@ Human, Producer, and Worker authentication primitives. Passwords use Argon2id. O
 ### `domain/`
 
 Core concepts and rules: job entities, statuses, state transitions, user roles, job-type status, worker capabilities, and capped exponential retry timing with jitter. This package remains independent of HTTP, Redis, and database details.
+
+### `demo/`
+
+Development-only, deterministic sample data. `seed.py` creates idempotent demo identities, ownership, disabled historical Job Types, Workers, jobs, and attempts without changing non-demo rows. It refuses to run outside the development environment.
 
 ### `persistence/`
 
@@ -106,7 +111,7 @@ Fast tests for domain rules, retry calculations, state transitions, and isolated
 
 ### `tests/integration/`
 
-Tests involving real PostgreSQL, Redis, MinIO, or multiple running components. These verify claims, leases, retries, and recovery across process boundaries.
+Tests involving real PostgreSQL, Redis, MinIO, or multiple running components. These verify claims, leases, retries, and recovery across process boundaries. `conftest.py` recreates and migrates only a database whose configured name ends in `_test`; development and demo rows are never test fixtures.
 
 ## Supporting directories
 
