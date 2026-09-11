@@ -24,7 +24,21 @@ jobs:
         working-directory: frontend
       - run: npx playwright install --with-deps chromium
         working-directory: frontend
-      - run: docker compose -p relay-ci up -d --build
+      - name: Pull infrastructure images
+        run: |
+          for attempt in 1 2 3; do
+            if docker compose -p relay-ci pull postgres redis minio minio-init prometheus; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            sleep $((attempt * 10))
+          done
+      - name: Build application image
+        run: docker compose -p relay-ci build init
+      - name: Start isolated stack
+        run: docker compose -p relay-ci up -d --no-build --pull never
         env:
           API_PORT: '58000'
       - name: Wait for application readiness
