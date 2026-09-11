@@ -1,19 +1,84 @@
+import { Link, useLocation } from "react-router-dom";
 import type { JobSummary } from "../api/types";
-import { EmptyRows, Panel, StatusBadge, TimeCell } from "./DashboardPrimitives";
-
-export function JobTable({ jobs, title = "Recent jobs" }: { jobs: JobSummary[]; title?: string }) {
-  return (
-    <Panel title={title} description="Newest durable jobs visible to this role">
-      {jobs.length === 0 ? <EmptyRows label="jobs" /> : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50/70 text-[11px] uppercase tracking-wider text-slate-400"><tr><th className="px-5 py-3 font-semibold">Job</th><th className="px-5 py-3 font-semibold">Queue</th><th className="px-5 py-3 font-semibold">Status</th><th className="px-5 py-3 font-semibold">Attempts</th><th className="px-5 py-3 font-semibold">Created</th></tr></thead>
-            <tbody className="divide-y divide-slate-100">
-              {jobs.map((job) => <tr key={job.job_id} className="hover:bg-slate-50/60"><td className="px-5 py-4"><p className="font-medium text-slate-900">{job.type}</p><p className="mt-0.5 max-w-36 truncate font-mono text-[10px] text-slate-400">{job.job_id}</p></td><td className="px-5 py-4 text-slate-600">{job.queue}</td><td className="px-5 py-4"><StatusBadge status={job.status} /></td><td className="px-5 py-4 tabular-nums text-slate-600">{job.attempt_count}/{job.max_attempts}</td><td className="px-5 py-4 text-slate-500"><TimeCell value={job.created_at} /></td></tr>)}
-            </tbody>
-          </table>
-        </div>
-      )}
+import {
+  DataTable,
+  EmptyRows,
+  IdCell,
+  Panel,
+  StatusBadge,
+  TimeCell,
+} from "./DashboardPrimitives";
+export function JobTable({
+  jobs,
+  title = "Recent jobs",
+  bare = false,
+}: {
+  jobs: JobSummary[];
+  title?: string;
+  bare?: boolean;
+}) {
+  const role = useLocation().pathname.split("/")[1];
+  const table =
+    jobs.length === 0 ? (
+      <EmptyRows
+        label="jobs found"
+        description="Submitted jobs will appear here. Adjust the filters to include more results."
+      />
+    ) : (
+      <DataTable label={title}>
+        <thead>
+          <tr>
+            <th>Job / ID</th>
+            <th>Status</th>
+            <th>Queue</th>
+            <th className="numeric">Priority</th>
+            <th className="numeric">Attempts</th>
+            <th className="numeric">Created</th>
+          </tr>
+        </thead>
+        <tbody>
+          {jobs.map((job) => (
+            <tr key={job.job_id}>
+              <td>
+                <Link className="row-title" to={`/${role}/jobs/${job.job_id}`}>
+                  {job.type}
+                </Link>
+                <div>
+                  <IdCell value={job.job_id} />
+                </div>
+              </td>
+              <td>
+                <StatusBadge status={job.status} />
+              </td>
+              <td>
+                <code>{job.queue}</code>
+              </td>
+              <td className="numeric">{job.priority}</td>
+              <td className="numeric">
+                {job.attempt_count}
+                <span className="text-muted"> / {job.max_attempts}</span>
+              </td>
+              <td className="numeric">
+                <TimeCell value={job.created_at} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </DataTable>
+    );
+  return bare ? (
+    table
+  ) : (
+    <Panel
+      title={title}
+      description="Newest jobs visible to this role"
+      action={
+        <Link className="text-link" to={`/${role}/jobs`}>
+          View all jobs →
+        </Link>
+      }
+    >
+      {table}
     </Panel>
   );
 }

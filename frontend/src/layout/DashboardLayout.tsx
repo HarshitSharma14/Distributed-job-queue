@@ -1,50 +1,247 @@
-import { Activity, Boxes, ChevronRight, LogOut, RadioTower } from "lucide-react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
-
+import {
+  Activity,
+  ArchiveX,
+  Box,
+  ChevronRight,
+  ClipboardList,
+  History,
+  KeyRound,
+  Layers,
+  ListTodo,
+  LockKeyhole,
+  LogOut,
+  Menu,
+  Plus,
+  RadioTower,
+  Server,
+  Users,
+  X,
+  type LucideIcon,
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
+import { useAction } from "../components/Management";
 import type { UserRole } from "../lib/api";
 
-const roleRoutes: Record<UserRole, { path: string; label: string }> = {
-  ADMIN: { path: "/admin", label: "Admin" },
-  PUBLISHER: { path: "/publisher", label: "Publisher" },
-  PRODUCER: { path: "/producer", label: "Producer" },
-  WORKER: { path: "/worker", label: "Worker" },
+const roleNames: Record<UserRole, string> = {
+  ADMIN: "Admin",
+  PUBLISHER: "Publisher",
+  PRODUCER: "Producer",
+  WORKER: "Worker",
 };
-
+const sections: Record<UserRole, [string, string, LucideIcon][]> = {
+  ADMIN: [
+    ["jobs", "Jobs", ListTodo],
+    ["dead-letters", "Dead letters", ArchiveX],
+    ["queues", "Queues", Layers],
+    ["workers", "Workers", Server],
+    ["releases", "Releases", Box],
+    ["users", "Accounts", Users],
+    ["audit", "Action history", History],
+  ],
+  PUBLISHER: [
+    ["releases", "Job Types & releases", Box],
+    ["jobs", "Jobs", ListTodo],
+  ],
+  PRODUCER: [
+    ["jobs", "Jobs", ListTodo],
+    ["submit", "Submit a job", Plus],
+    ["keys", "API keys", KeyRound],
+  ],
+  WORKER: [
+    ["agents", "Worker Agents", Server],
+    ["assignments", "Assignments", ClipboardList],
+    ["attempts", "Attempt history", History],
+  ],
+};
+export function Brand() {
+  return (
+    <div>
+      <div className="brand">
+        <span className="brand-mark">
+          <RadioTower size={23} />
+        </span>
+        Relay
+      </div>
+      <p className="brand-subtitle">Distributed job queue</p>
+    </div>
+  );
+}
 export function DashboardLayout({ role }: { role: UserRole }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const current = roleRoutes[role];
+  const location = useLocation();
+  const [open, setOpen] = useState(false);
+  const menu = useRef<HTMLButtonElement>(null);
+  const sidebar = useRef<HTMLElement>(null);
+  const action = useAction();
+  const root = `/${role.toLowerCase()}`;
+  const section = location.pathname.split("/")[2];
+  const label =
+    sections[role].find(([path]) => path === section)?.[1] ?? "Overview";
+  useEffect(() => {
+    setOpen(false);
+  }, [location.pathname]);
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    sidebar.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+        menu.current?.focus();
+      }
+      if (event.key === "Tab") {
+        const items = Array.from(
+          sidebar.current?.querySelectorAll<HTMLElement>("a, button, select") ??
+            [],
+        ).filter((node) => node.getClientRects().length);
+        const first = items[0],
+          last = items.at(-1);
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        }
+        if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => {
+      document.body.style.overflow = previous;
+      document.removeEventListener("keydown", handler);
+    };
+  }, [open]);
   return (
-    <div className="min-h-screen bg-[#f6f7f2] text-slate-950">
-      <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 flex-col bg-[#101827] px-4 py-5 text-white lg:flex">
-        <div className="flex items-center gap-3 px-2">
-          <div className="grid h-10 w-10 place-items-center rounded-xl bg-indigo-500 shadow-lg shadow-indigo-950/30"><RadioTower className="h-5 w-5" /></div>
-          <div><p className="font-semibold tracking-tight">Relay</p><p className="text-[11px] text-slate-400">Distributed queue</p></div>
+    <div className="app-shell">
+      <a className="skip-link" href="#main-content">
+        Skip to content
+      </a>
+      {open && (
+        <button
+          className="nav-backdrop"
+          aria-label="Close navigation"
+          onClick={() => {
+            setOpen(false);
+            menu.current?.focus();
+          }}
+        />
+      )}
+      <aside
+        id="navigation"
+        ref={sidebar}
+        className={`sidebar ${open ? "is-open" : ""}`}
+        aria-label="Workspace navigation"
+      >
+        <div className="flex items-center justify-between">
+          <Brand />
+          <button
+            className="icon-button mobile-menu"
+            aria-label="Close navigation"
+            onClick={() => {
+              setOpen(false);
+              menu.current?.focus();
+            }}
+          >
+            <X size={18} />
+          </button>
         </div>
-        <div className="mt-9 px-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Workspace</div>
-        <nav className="mt-3 space-y-1">
-          <NavLink to={current.path} className="flex items-center gap-3 rounded-xl bg-white/10 px-3 py-2.5 text-sm font-medium"><Activity className="h-4 w-4 text-indigo-300" />Overview</NavLink>
+        <div className="role-switch">
+          <label htmlFor="role-switch">Role</label>
+          <select
+            id="role-switch"
+            className="input"
+            value={role}
+            onChange={(event) =>
+              navigate(`/${event.target.value.toLowerCase()}`)
+            }
+          >
+            {user?.roles.map((r) => (
+              <option key={r} value={r}>
+                {roleNames[r]}
+              </option>
+            ))}
+          </select>
+        </div>
+        <p className="nav-label">Workspace</p>
+        <nav
+          className="sidebar-nav"
+          aria-label={`${roleNames[role]} navigation`}
+        >
+          <NavLink
+            end
+            to={root}
+            className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}
+          >
+            <Activity size={16} />
+            Overview
+          </NavLink>
+          {sections[role].map(([path, name, Icon]) => (
+            <NavLink
+              key={path}
+              to={`${root}/${path}`}
+              className={({ isActive }) =>
+                `nav-item ${isActive ? "active" : ""}`
+              }
+            >
+              <Icon size={16} />
+              {name}
+            </NavLink>
+          ))}
         </nav>
-        <div className="mt-8 px-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Your roles</div>
-        <nav className="mt-3 space-y-1">
-          {user?.roles.map((userRole) => {
-            const item = roleRoutes[userRole];
-            return <NavLink key={userRole} to={item.path} className={({ isActive }) => `flex items-center justify-between rounded-xl px-3 py-2 text-sm ${isActive ? "text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}><span className="flex items-center gap-3"><Boxes className="h-4 w-4" />{item.label}</span><ChevronRight className="h-3.5 w-3.5" /></NavLink>;
-          })}
-        </nav>
-        <div className="mt-auto rounded-2xl border border-white/10 bg-white/5 p-3">
-          <p className="truncate text-sm font-medium">{user?.display_name}</p>
-          <p className="mt-0.5 truncate text-xs text-slate-400">{user?.email}</p>
-          <button className="mt-3 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-slate-300 hover:bg-white/10" onClick={() => void logout().then(() => navigate("/login"))}><LogOut className="h-3.5 w-3.5" />Sign out</button>
+        <div className="sidebar-account">
+          <p className="account-name">{user?.display_name}</p>
+          <p className="account-email" title={user?.email}>
+            {user?.email}
+          </p>
+          <NavLink to="/password" className="nav-item">
+            <LockKeyhole size={15} />
+            Change password
+          </NavLink>
+          <button
+            className="nav-item w-full"
+            disabled={action.busy}
+            onClick={() =>
+              void action.run(async () => {
+                await logout();
+                navigate("/login");
+              }, "Signed out")
+            }
+          >
+            <LogOut size={15} />
+            Sign out
+          </button>
         </div>
       </aside>
-      <div className="lg:pl-64">
-        <div className="border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur lg:hidden">
-          <div className="flex items-center justify-between"><span className="font-semibold">Relay</span><button aria-label="Sign out" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" onClick={() => void logout().then(() => navigate("/login"))}><LogOut className="h-4 w-4" /></button></div>
-          <nav className="mt-2 flex gap-1 overflow-x-auto">{user?.roles.map((userRole) => { const item = roleRoutes[userRole]; return <NavLink key={userRole} to={item.path} className={({ isActive }) => `whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium ${isActive ? "bg-indigo-50 text-indigo-700" : "text-slate-500"}`}>{item.label}</NavLink>; })}</nav>
+      <div className="app-body">
+        <div className="topbar">
+          <button
+            ref={menu}
+            className="icon-button mobile-menu"
+            aria-label="Open navigation"
+            aria-expanded={open}
+            aria-controls="navigation"
+            onClick={() => setOpen(true)}
+          >
+            <Menu size={19} />
+          </button>
+          <span>{roleNames[role]}</span>
+          <ChevronRight size={12} />
+          <span className="location">{label}</span>
+          {location.pathname.split("/").length > 3 && (
+            <>
+              <ChevronRight size={12} />
+              <span>Details</span>
+            </>
+          )}
         </div>
-        <main className="mx-auto max-w-[1440px] px-5 py-8 md:px-8 md:py-10"><Outlet /></main>
+        <main id="main-content" className="main-content" tabIndex={-1}>
+          <Outlet />
+        </main>
       </div>
     </div>
   );

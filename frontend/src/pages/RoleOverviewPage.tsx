@@ -1,33 +1,86 @@
 import { useQuery } from "@tanstack/react-query";
-import { Activity, CheckCircle2, Clock3, Layers3 } from "lucide-react";
-
+import { Link } from "react-router-dom";
 import type { Analytics, JobList } from "../api/types";
 import { PageHeading, StatCard } from "../components/DashboardPrimitives";
-import { PageError } from "../components/Feedback";
+import { PageError, PageSkeleton, TableSkeleton } from "../components/Feedback";
 import { JobTable } from "../components/JobTable";
 import { api } from "../lib/api";
 import { compactNumber, duration, percent } from "../lib/format";
-
 export function RoleOverviewPage({ role }: { role: "publisher" | "producer" }) {
-  const title = role === "publisher" ? "Job Type performance" : "Your submitted work";
-  const description = role === "publisher"
-    ? "Every job created from handlers you publish, across producers and versions."
-    : "Lifecycle, outcomes, and recent activity for jobs submitted by you.";
-  const analytics = useQuery({ queryKey: [role, "analytics"], queryFn: () => api<Analytics>(`/${role}/analytics`), refetchInterval: 30_000 });
-  const jobs = useQuery({ queryKey: [role, "jobs"], queryFn: () => api<JobList>(`/${role}/jobs?limit=8`), refetchInterval: 15_000 });
-  if (analytics.isPending || jobs.isPending) return <div className="h-96 animate-pulse rounded-2xl bg-white" />;
-  if (analytics.isError || jobs.isError) return <PageError message={(analytics.error ?? jobs.error)?.message} />;
-  const data = analytics.data;
+  const analytics = useQuery({
+    queryKey: [role, "analytics"],
+    queryFn: () => api<Analytics>(`/${role}/analytics`),
+    refetchInterval: 30_000,
+  });
+  const jobs = useQuery({
+    queryKey: [role, "jobs"],
+    queryFn: () => api<JobList>(`/${role}/jobs?limit=8`),
+    refetchInterval: 15_000,
+  });
   return (
-    <div className="space-y-8">
-      <PageHeading eyebrow={`${role} workspace`} title={title} description={description} />
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Visible jobs" value={compactNumber(data.total_jobs)} note={role === "publisher" ? `${data.job_types.length} released versions` : "Ownership scoped"} icon={Layers3} />
-        <StatCard label="Success rate" value={percent(data.terminal_success_rate)} note={`${data.terminal_jobs} terminal jobs`} icon={CheckCircle2} tone="emerald" />
-        <StatCard label="Completion time" value={duration(data.average_completion_latency_ms)} note="Average end-to-end" icon={Clock3} tone="amber" />
-        <StatCard label="Attempts" value={compactNumber(data.total_attempts)} note={`${data.average_attempts?.toFixed(2) ?? "—"} per job`} icon={Activity} tone="slate" />
-      </div>
-      <JobTable jobs={jobs.data.items} />
+    <div className="space-y-6">
+      <PageHeading
+        title={
+          role === "publisher" ? "Publisher overview" : "Producer overview"
+        }
+        description={
+          role === "publisher"
+            ? "Performance of the handlers you publish, across producers and versions."
+            : "Lifecycle and outcomes for the jobs you submit."
+        }
+        action={
+          <Link
+            className="button button-primary"
+            to={
+              role === "publisher" ? "/publisher/releases" : "/producer/submit"
+            }
+          >
+            {role === "publisher" ? "Manage releases" : "Submit a job"}
+          </Link>
+        }
+      />
+      {analytics.isPending ? (
+        <PageSkeleton />
+      ) : analytics.isError ? (
+        <PageError
+          message={analytics.error.message}
+          retry={analytics.refetch}
+        />
+      ) : (
+        <div className="stats-grid">
+          <StatCard
+            label="Total jobs"
+            value={compactNumber(analytics.data.total_jobs)}
+            note={
+              role === "publisher"
+                ? `${analytics.data.job_types.length} Job Type versions with jobs`
+                : "Submitted by you"
+            }
+          />
+          <StatCard
+            label="Terminal success"
+            value={percent(analytics.data.terminal_success_rate)}
+            note={`${analytics.data.terminal_jobs.toLocaleString()} terminal jobs`}
+          />
+          <StatCard
+            label="Average completion"
+            value={duration(analytics.data.average_completion_latency_ms)}
+            note="Created to completed"
+          />
+          <StatCard
+            label="Total attempts"
+            value={compactNumber(analytics.data.total_attempts)}
+            note={`${analytics.data.average_attempts?.toFixed(2) ?? "—"} per job`}
+          />
+        </div>
+      )}
+      {jobs.isPending ? (
+        <TableSkeleton />
+      ) : jobs.isError ? (
+        <PageError message={jobs.error.message} retry={jobs.refetch} />
+      ) : (
+        <JobTable jobs={jobs.data.items} />
+      )}
     </div>
   );
 }
