@@ -8,13 +8,14 @@ export default defineConfig({
   server: {
     open: "/app/",
     proxy: {
-      "^/(auth|admin|publisher|producer|worker-management|jobs|job-types)": {
+      "^/(auth|admin|publisher|producer|worker-management|worker/v1|jobs|job-types|catalog|management)": {
         target: "http://localhost:8000",
         changeOrigin: true,
       },
     },
   },
   test: {
+    exclude: ["e2e/**", "node_modules/**"],
     environment: "jsdom",
     setupFiles: "./src/test/setup.ts",
     css: true,

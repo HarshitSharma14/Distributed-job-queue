@@ -6,7 +6,9 @@ import { App } from "./App";
 import { AuthProvider } from "./auth/AuthProvider";
 
 function renderApp(path: string) {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   return render(
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
@@ -22,13 +24,20 @@ describe("dashboard routing", () => {
   it("sends anonymous users to the login page", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
-        JSON.stringify({ error: { code: "AUTHENTICATION_REQUIRED", message: "Authentication required" } }),
+        JSON.stringify({
+          error: {
+            code: "AUTHENTICATION_REQUIRED",
+            message: "Authentication required",
+          },
+        }),
         { status: 401, headers: { "Content-Type": "application/json" } },
       ),
     );
 
     renderApp("/admin");
 
-    expect(await screen.findByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Sign in to Relay" }),
+    ).toBeInTheDocument();
   });
 });

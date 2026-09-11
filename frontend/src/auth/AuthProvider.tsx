@@ -17,7 +17,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const userQuery = useQuery({
     queryKey: ["current-user"],
     queryFn: () => api<CurrentUser>("/auth/me"),
-    retry: (count, error) => !(error instanceof ApiError && error.status === 401) && count < 2,
+    retry: (count, error) =>
+      !(error instanceof ApiError && error.status === 401) && count < 2,
     staleTime: 60_000,
   });
   const loginMutation = useMutation({
@@ -32,7 +33,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     mutationFn: () => api<void>("/auth/logout", { method: "POST" }),
     onSuccess: () => {
       queryClient.setQueryData(["current-user"], null);
-      queryClient.removeQueries({ predicate: ({ queryKey }) => queryKey[0] !== "current-user" });
+      queryClient.removeQueries({
+        predicate: ({ queryKey }) => queryKey[0] !== "current-user",
+      });
     },
   });
 
@@ -41,7 +44,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user: userQuery.data ?? null,
         loading: userQuery.isPending,
-        login: (email, password) => loginMutation.mutateAsync({ email, password }),
+        login: (email, password) =>
+          loginMutation.mutateAsync({ email, password }),
         logout: () => logoutMutation.mutateAsync(),
       }}
     >

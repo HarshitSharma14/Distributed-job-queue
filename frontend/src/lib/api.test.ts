@@ -14,13 +14,20 @@ describe("api", () => {
 
     const [, options] = fetchMock.mock.calls[0];
     expect(options?.credentials).toBe("include");
-    expect(new Headers(options?.headers).get("X-CSRF-Token")).toBe("csrf-value");
+    expect(new Headers(options?.headers).get("X-CSRF-Token")).toBe(
+      "csrf-value",
+    );
   });
 
   it("preserves the stable backend error contract", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
-        JSON.stringify({ error: { code: "AUTHENTICATION_REQUIRED", message: "Authentication required" } }),
+        JSON.stringify({
+          error: {
+            code: "AUTHENTICATION_REQUIRED",
+            message: "Authentication required",
+          },
+        }),
         { status: 401, headers: { "Content-Type": "application/json" } },
       ),
     );

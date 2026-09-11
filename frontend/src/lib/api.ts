@@ -5,6 +5,7 @@ export interface CurrentUser {
   email: string;
   display_name: string;
   roles: UserRole[];
+  password_change_required?: boolean;
 }
 
 export class ApiError extends Error {
