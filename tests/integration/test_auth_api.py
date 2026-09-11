@@ -73,6 +73,7 @@ def test_login_identity_csrf_logout_and_revocation(auth_context):
                 "email": user.email,
                 "display_name": "Dashboard User",
                 "roles": ["PRODUCER", "PUBLISHER"],
+                "password_change_required": False,
             }
             raw_session_token = client.cookies.get(SESSION_COOKIE_NAME)
             csrf_token = client.cookies.get(CSRF_COOKIE_NAME)

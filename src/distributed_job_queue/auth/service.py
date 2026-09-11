@@ -36,6 +36,7 @@ class AuthenticatedPrincipal:
     display_name: str
     roles: frozenset[UserRole]
     credential_kind: CredentialKind
+    password_change_required: bool = False
     browser_session: BrowserSession | None = None
     producer_credential: ProducerCredential | None = None
 
@@ -161,6 +162,7 @@ def _principal(
             if producer_credential is not None
             else CredentialKind.BROWSER_SESSION
         ),
+        password_change_required=user.password_change_required,
         browser_session=browser_session,
         producer_credential=producer_credential,
     )

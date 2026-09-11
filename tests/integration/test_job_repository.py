@@ -35,12 +35,11 @@ def test_create_read_and_transition_job(repository):
         payload={"user_id": 123},
         priority=5,
     )
-    assert job.status == JobStatus.CREATED.value
+    assert job.status == JobStatus.QUEUED.value
     assert job.attempts == 0
     outbox_count = session.scalar(select(func.count()).select_from(OutboxEvent))
     assert outbox_count == 1
 
-    job_repository.transition(job, JobStatus.QUEUED)
     job_repository.transition(job, JobStatus.RUNNING)
     session.flush()
 
@@ -65,7 +64,6 @@ def test_invalid_transition_and_attempt_history(repository):
     with pytest.raises(InvalidJobTransition):
         job_repository.transition(job, JobStatus.COMPLETED)
 
-    job_repository.transition(job, JobStatus.QUEUED)
     job_repository.transition(job, JobStatus.RUNNING)
     attempt = job_repository.record_attempt(
         job,
@@ -92,7 +90,6 @@ def test_claim_and_recover_expired_job_from_postgres(repository):
         payload={},
         priority=4,
     )
-    job_repository.transition(job, JobStatus.QUEUED)
     expired_at = datetime.now(timezone.utc)
     job_repository.mark_running(
         job.id,
@@ -127,6 +124,41 @@ def test_claim_and_recover_expired_job_from_postgres(repository):
     assert outbox_count == 1
 
 
+def test_offline_worker_job_waits_for_lease_expiry(repository):
+    job_repository, session = repository
+    worker = Worker(
+        id="offline-worker-with-live-lease",
+        capabilities=["reports"],
+        status="ONLINE",
+    )
+    session.add(worker)
+    job = job_repository.create(
+        job_type="generate_report",
+        queue="reports",
+        payload={},
+    )
+    now = datetime.now(timezone.utc)
+    job_repository.mark_running(
+        job.id,
+        worker_id=worker.id,
+        lease_token="live-lease-token",
+        lease_expires_at=now + timedelta(minutes=1),
+    )
+    worker.status = "OFFLINE"
+    session.flush()
+
+    recovered = job_repository.recover_expired(
+        now=now,
+        limit=10,
+        retry_at_for_attempt=lambda _attempt: now + timedelta(seconds=30),
+    )
+
+    assert recovered == []
+    assert job.status == JobStatus.RUNNING.value
+    assert job.worker_id == worker.id
+    assert job.lease_token == "live-lease-token"
+
+
 def test_reconcile_queued_job_creates_missing_outbox_event(repository):
     job_repository, session = repository
     job = job_repository.create(
@@ -134,7 +166,6 @@ def test_reconcile_queued_job_creates_missing_outbox_event(repository):
         queue="reports",
         payload={},
     )
-    job_repository.transition(job, JobStatus.QUEUED)
     events = list(session.scalars(select(OutboxEvent).where(OutboxEvent.job_id == job.id)))
     events[0].published_at = datetime.now(timezone.utc)
     session.flush()
@@ -159,7 +190,6 @@ def test_stale_fencing_token_cannot_complete_job(repository):
         queue="reports",
         payload={},
     )
-    job_repository.transition(job, JobStatus.QUEUED)
     now = datetime.now(timezone.utc)
     job_repository.mark_running(
         job.id,
@@ -191,7 +221,6 @@ def test_expired_final_attempt_is_dead_lettered(repository):
         payload={},
         max_attempts=1,
     )
-    job_repository.transition(job, JobStatus.QUEUED)
     expired_at = datetime.now(timezone.utc)
     job_repository.mark_running(
         job.id,
@@ -224,7 +253,6 @@ def test_job_is_dead_lettered_after_retry_exhaustion(repository):
         payload={},
         max_attempts=2,
     )
-    job_repository.transition(job, JobStatus.QUEUED)
 
     first_started_at = datetime.now(timezone.utc)
     job_repository.mark_running(

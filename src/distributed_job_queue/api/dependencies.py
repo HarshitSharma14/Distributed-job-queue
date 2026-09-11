@@ -1,5 +1,6 @@
 """FastAPI dependencies shared by API routes."""
 
+import os
 from collections.abc import Iterator
 from secrets import compare_digest
 from typing import Annotated
@@ -58,6 +59,7 @@ def get_result_storage() -> MinioResultStorage:
         settings.minio_access_key,
         settings.minio_secret_key,
         settings.minio_bucket,
+        public_endpoint=os.getenv("MINIO_PUBLIC_ENDPOINT") or None,
     )
 
 
@@ -70,6 +72,7 @@ def get_handler_storage() -> MinioHandlerStorage:
         settings.minio_access_key,
         settings.minio_secret_key,
         settings.minio_handler_bucket,
+        public_endpoint=os.getenv("MINIO_PUBLIC_ENDPOINT") or None,
     )
 
 

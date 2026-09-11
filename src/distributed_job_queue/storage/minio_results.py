@@ -23,6 +23,7 @@ class MinioResultStorage:
         access_key: str,
         secret_key: str,
         bucket: str,
+        public_endpoint: str | None = None,
     ) -> None:
         parsed = urlparse(endpoint)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
@@ -39,6 +40,13 @@ class MinioResultStorage:
             secure=parsed.scheme == "https",
         )
 
+        self.signer = None
+        if public_endpoint:
+            public = urlparse(public_endpoint)
+            if public.scheme not in {"http", "https"} or not public.netloc or public.path not in {"", "/"}:
+                raise ValueError("Public MinIO endpoint must be an http(s) origin")
+            self.signer = Minio(public.netloc, access_key=access_key, secret_key=secret_key, secure=public.scheme == "https", region="us-east-1")
+
     def create_result_upload(
         self,
         *,
@@ -52,7 +60,7 @@ class MinioResultStorage:
             raise ValueError("expires_in_seconds must be at least 1")
         result_ref = f"jobs/{job_id}/attempts/{attempt_number}/result.json"
         expires = timedelta(seconds=expires_in_seconds)
-        upload_url = self.client.presigned_put_object(
+        upload_url = (self.signer or self.client).presigned_put_object(
             self.bucket,
             result_ref,
             expires=expires,

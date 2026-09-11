@@ -1,6 +1,9 @@
 """FastAPI application factory."""
 
 from fastapi import FastAPI
+from distributed_job_queue.api.health_routes import router as health_router
+from distributed_job_queue.api.account_routes import router as account_router
+from distributed_job_queue.api.product_routes import router as product_router
 
 from distributed_job_queue.api.auth_routes import router as auth_router
 from distributed_job_queue.api.admin_routes import router as admin_router
@@ -33,6 +36,9 @@ def create_app() -> FastAPI:
     application.include_router(worker_dashboard_router)
     application.include_router(worker_gateway_router)
     application.include_router(metrics_router)
+    application.include_router(health_router)
+    application.include_router(account_router)
+    application.include_router(product_router)
     mount_frontend(application)
     return application
 

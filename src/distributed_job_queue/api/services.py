@@ -151,6 +151,8 @@ def get_job_detail(
             return None
     attempts = sorted(job.attempts_history, key=lambda attempt: attempt.attempt_number)
     return JobDetailResponse(
+        replay_of_job_id=job.replay_of_job_id,
+        replay_requested_by=job.replay_requested_by,
         job_id=job.id,
         job_type_id=job.job_type_id,
         publisher_id=job.publisher_id,

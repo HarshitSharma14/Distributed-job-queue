@@ -5,6 +5,7 @@ import threading
 import logging
 from datetime import datetime, timezone
 
+from distributed_job_queue.common.health import mark_progress
 from distributed_job_queue.common.config import load_settings
 from distributed_job_queue.common.logging import configure_logging
 from distributed_job_queue.common.metrics import start_process_metrics_server
@@ -43,6 +44,7 @@ def main() -> None:
 
     while not stop.is_set():
         result = run_once()
+        mark_progress()
         if result.offline_worker_ids or result.recovered_job_ids:
             logger.warning(
                 "Recovered stale distributed state",

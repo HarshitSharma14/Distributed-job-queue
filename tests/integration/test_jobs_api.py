@@ -142,7 +142,7 @@ def test_submit_job_creates_job_and_outbox_event_atomically(api_context):
 
     assert response.status_code == 202
     body = response.json()
-    assert body["status"] == JobStatus.CREATED.value
+    assert body["status"] == JobStatus.QUEUED.value
     assert body["type"] == "generate_report"
     assert body["queue"] == "reports"
     assert body["priority"] == 8
@@ -221,7 +221,7 @@ def test_get_job_returns_authoritative_state(api_context):
     assert body["job_type_id"] == api_context.job_type_id
     assert body["publisher_id"] == api_context.publisher_id
     assert body["producer_id"] == api_context.producer_id
-    assert body["status"] == JobStatus.CREATED.value
+    assert body["status"] == JobStatus.QUEUED.value
     assert body["payload"] == {"report_id": 42}
     assert body["attempt_count"] == 0
     assert body["attempt_history"] == []
@@ -241,7 +241,6 @@ def test_get_job_returns_ordered_attempt_history(api_context):
     repository = JobRepository(session)
     job = repository.get(created["job_id"])
     assert job is not None
-    repository.transition(job, JobStatus.QUEUED)
     lease_expires_at = datetime.now(timezone.utc) + timedelta(minutes=1)
     repository.mark_running(
         job.id,

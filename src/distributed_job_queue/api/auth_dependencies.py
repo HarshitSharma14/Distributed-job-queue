@@ -37,6 +37,7 @@ def require_current_principal(
             code="AUTHENTICATION_REQUIRED",
             message="Authentication required",
         )
+    _check_password_change(request, principal)
     return principal
 
 
@@ -68,6 +69,7 @@ def require_product_principal(
             message="Authentication required",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    _check_password_change(request, principal)
     return principal
 
 
@@ -227,3 +229,8 @@ def _validate_csrf(
             message="CSRF validation failed",
         )
     return principal
+
+
+def _check_password_change(request: Request, principal: AuthenticatedPrincipal) -> None:
+    if principal.password_change_required and request.url.path not in {"/auth/me", "/auth/logout", "/auth/password"}:
+        raise APIError(status_code=403, code="PASSWORD_CHANGE_REQUIRED", message="Change your temporary password before continuing")

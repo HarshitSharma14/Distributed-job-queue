@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import json
+from pathlib import Path
 from dataclasses import dataclass
 
 
@@ -113,6 +115,10 @@ def load_settings() -> Settings:
             "PROMETHEUS_URL is required when Prometheus credentials are configured"
         )
 
+    signing = {}
+    if os.getenv("HANDLER_SIGNING_FILE"):
+        signing = json.loads(Path(os.environ["HANDLER_SIGNING_FILE"]).read_text())
+
     return Settings(
         environment=environment,
         debug=_get_bool("APP_DEBUG", False),
@@ -166,10 +172,10 @@ def load_settings() -> Settings:
         handler_sandbox_max_output_bytes=_get_int(
             "HANDLER_SANDBOX_MAX_OUTPUT_BYTES", 1024 * 1024, minimum=1024
         ),
-        handler_signing_key_id=os.getenv("HANDLER_SIGNING_KEY_ID", "local-dev"),
-        handler_signing_private_key=os.getenv("HANDLER_SIGNING_PRIVATE_KEY"),
+        handler_signing_key_id=os.getenv("HANDLER_SIGNING_KEY_ID", signing.get("key_id", "local-dev")),
+        handler_signing_private_key=os.getenv("HANDLER_SIGNING_PRIVATE_KEY") or signing.get("private_key"),
         handler_trusted_public_keys=os.getenv(
-            "HANDLER_TRUSTED_PUBLIC_KEYS", "{}"
+            "HANDLER_TRUSTED_PUBLIC_KEYS", json.dumps({signing["key_id"]: signing["public_key"]}) if signing else "{}"
         ),
         metrics_token=metrics_token,
         metrics_port=_get_int("METRICS_PORT", 0, minimum=0),

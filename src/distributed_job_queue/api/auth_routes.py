@@ -187,6 +187,7 @@ def _current_user_response(
     principal: AuthenticatedPrincipal,
 ) -> CurrentUserResponse:
     return CurrentUserResponse(
+        password_change_required=principal.password_change_required,
         user_id=principal.user_id,
         email=principal.email,
         display_name=principal.display_name,

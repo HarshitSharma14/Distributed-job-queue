@@ -19,6 +19,7 @@ class CurrentUserResponse(BaseModel):
     email: str
     display_name: str
     roles: list[UserRole]
+    password_change_required: bool = False
 
 
 class ProducerKeyCreateRequest(BaseModel):

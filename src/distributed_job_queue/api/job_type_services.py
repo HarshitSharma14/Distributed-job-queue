@@ -1,6 +1,7 @@
 """Publisher-owned Job Type catalog operations."""
 
 from datetime import datetime, timezone
+from distributed_job_queue.api.management_services import audit
 from uuid import uuid4
 
 from minio.error import S3Error
@@ -145,6 +146,7 @@ def disable_visible_job_type(
     job_type = get_visible_job_type(session, job_type_id, principal=principal)
     if job_type is None:
         return None
+    audit(session, principal.user_id, "release.disable", job_type.id)
     return IdentityRepository(session).disable_job_type(job_type)
 
 
@@ -307,6 +309,7 @@ def approve_handler_release(
     job_type.handler_signing_key_id = settings.handler_signing_key_id
     job_type.handler_release_signature = signature
     job_type.status = JobTypeStatus.ACTIVE.value
+    audit(session, admin_user_id, "release.approve", job_type.id, artifact_id=artifact.id)
     session.flush()
     return artifact, job_type
 
@@ -338,5 +341,6 @@ def reject_handler_release(
     artifact.rejected_by_user_id = admin_user_id
     artifact.rejected_at = datetime.now(timezone.utc)
     job_type.status = JobTypeStatus.DRAFT.value
+    audit(session, admin_user_id, "release.reject", job_type.id, artifact_id=artifact.id, reason=reason.strip())
     session.flush()
     return artifact, job_type

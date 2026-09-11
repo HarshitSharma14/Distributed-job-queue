@@ -247,7 +247,6 @@ def create_ready_job(
         publisher_id=job_type.publisher_id,
         producer_id=job_type.publisher_id,
     )
-    repository.transition(job, JobStatus.QUEUED)
     queue.enqueue(job.id, queue=queue_name, priority=job.priority)
     return job
 
@@ -583,7 +582,6 @@ def test_gateway_rejects_same_named_job_type_from_another_publisher(
         publisher_id=other_publisher.id,
         producer_id=other_publisher.id,
     )
-    JobRepository(session).transition(job, JobStatus.QUEUED)
     queue.enqueue(job.id, queue=queue_name, priority=job.priority)
 
     response = gateway_request(

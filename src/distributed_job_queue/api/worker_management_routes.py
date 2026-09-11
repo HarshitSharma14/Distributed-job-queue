@@ -1,6 +1,7 @@
 """Human-facing Worker Agent enrollment and credential management."""
 
 from datetime import datetime, timezone
+from distributed_job_queue.api.management_services import audit
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response, status
@@ -112,6 +113,7 @@ def revoke_agent_credential(
     )
     for credential in credentials:
         credential.revoked_at = current_time
+    audit(session, principal.user_id, "worker.revoke", worker.id)
     session.flush()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

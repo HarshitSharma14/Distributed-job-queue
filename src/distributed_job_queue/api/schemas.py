@@ -44,6 +44,8 @@ class JobAttemptResponse(BaseModel):
 
 
 class JobDetailResponse(BaseModel):
+    replay_of_job_id: str | None = None
+    replay_requested_by: str | None = None
     job_id: str
     job_type_id: str
     publisher_id: str

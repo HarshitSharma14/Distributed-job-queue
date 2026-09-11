@@ -49,7 +49,7 @@ class JobRepository:
             idempotency_key=idempotency_key,
             request_hash=request_hash,
             priority=priority,
-            status=JobStatus.CREATED.value,
+            status=JobStatus.QUEUED.value,
             max_attempts=max_attempts,
         )
         if available_at is not None:

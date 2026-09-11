@@ -5,6 +5,7 @@ import logging
 
 from redis import Redis
 
+from distributed_job_queue.common.health import mark_progress
 from distributed_job_queue.common.config import load_settings
 from distributed_job_queue.common.logging import configure_logging
 from distributed_job_queue.common.metrics import start_process_metrics_server
@@ -29,6 +30,7 @@ def main() -> None:
     start_process_metrics_server(settings.metrics_port)
     while True:
         published = run_once()
+        mark_progress()
         if published:
             logger.info(
                 "Published outbox batch",

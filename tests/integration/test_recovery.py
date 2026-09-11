@@ -44,7 +44,6 @@ def test_recovery_fences_expired_attempt_and_schedules_retry(recovery_context):
         queue="reports",
         payload={"report_id": 42},
     )
-    repository.transition(job, JobStatus.QUEUED)
     repository.mark_running(
         job.id,
         worker_id=worker.id,

@@ -52,7 +52,6 @@ def create_retry_job(
         payload={"report_id": 42},
         priority=7,
     )
-    repository.transition(job, JobStatus.QUEUED)
     now = datetime.now(timezone.utc)
     lease_token = str(uuid4())
     repository.mark_running(

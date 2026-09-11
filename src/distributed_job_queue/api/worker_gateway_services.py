@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from distributed_job_queue.api.management_services import lock_queue
 from distributed_job_queue.api.schemas import (
     WorkerClaimRequest,
     WorkerClaimResponse,
@@ -163,11 +164,30 @@ def claim_gateway_job(
     if lease is None:
         return None
 
+    with session_factory() as session:
+        from distributed_job_queue.persistence.models import QueueControl
+        control = session.get(QueueControl, request.queue)
+        paused = control is not None and control.paused
+    if paused:
+        queue.abandon_claim(lease.job_id, queue=lease.queue, worker_id=lease.worker_id, token=lease.token)
+        return None
+
     try:
         with session_factory.begin() as session:
+            if lock_queue(session, request.queue).paused:
+                queue.abandon_claim(lease.job_id, queue=lease.queue, worker_id=lease.worker_id, token=lease.token)
+                return None
             repository = JobRepository(session)
             job = repository.get(lease.job_id)
-            if job is None or job.status != JobStatus.QUEUED.value:
+            if job is None:
+                logger.error("Claimed job does not exist", extra={"job_id": lease.job_id})
+                _release_stale_gateway_claim(queue, lease)
+                return None
+            if job.status != JobStatus.QUEUED.value:
+                logger.warning(
+                    "Claimed job is not queued",
+                    extra={"job_id": job.id, "status": job.status},
+                )
                 _release_stale_gateway_claim(queue, lease)
                 return None
             if (
@@ -335,6 +355,13 @@ def complete_gateway_job(
                 replayed=replayed,
             )
     except ConcurrentJobUpdate as exc:
+        _release_gateway_lease(
+            queue,
+            job_id=job_id,
+            queue_name=queue_name,
+            worker_id=request.worker_id,
+            lease_token=lease_token,
+        )
         raise WorkerLeaseLost(f"Worker no longer owns job {job_id}") from exc
 
     _release_gateway_lease(
