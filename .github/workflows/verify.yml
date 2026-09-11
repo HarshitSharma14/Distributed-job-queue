@@ -7,7 +7,6 @@ jobs:
     env:
       BOOTSTRAP_ADMIN_EMAIL: admin@relay.local
       BOOTSTRAP_ADMIN_PASSWORD: ci-bootstrap-password-123
-      API_PORT: '58000'
       E2E_BASE_URL: http://localhost:58000
       E2E_ADMIN_PASSWORD: ci-bootstrap-password-123
     steps:
@@ -26,6 +25,8 @@ jobs:
       - run: npx playwright install --with-deps chromium
         working-directory: frontend
       - run: docker compose -p relay-ci up -d --build
+        env:
+          API_PORT: '58000'
       - name: Wait for application readiness
         run: |
           for attempt in $(seq 1 60); do
