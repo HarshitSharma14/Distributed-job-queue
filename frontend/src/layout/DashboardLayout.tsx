@@ -23,6 +23,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import { useAction } from "../components/Management";
 import type { UserRole } from "../lib/api";
+import { isDemoAccount } from "../lib/demo";
 
 const roleNames: Record<UserRole, string> = {
   ADMIN: "Admin",
@@ -200,10 +201,12 @@ export function DashboardLayout({ role }: { role: UserRole }) {
           <p className="account-email" title={user?.email}>
             {user?.email}
           </p>
-          <NavLink to="/password" className="nav-item">
-            <LockKeyhole size={15} />
-            Change password
-          </NavLink>
+          {!isDemoAccount(user?.email) && (
+            <NavLink to="/password" className="nav-item">
+              <LockKeyhole size={15} />
+              Change password
+            </NavLink>
+          )}
           <button
             className="nav-item w-full"
             disabled={action.busy}

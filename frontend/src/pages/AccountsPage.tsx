@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../auth/AuthProvider";
 import { Brand } from "../layout/DashboardLayout";
@@ -13,6 +13,7 @@ import {
   TimeCell,
 } from "../components/DashboardPrimitives";
 import type { UserRole } from "../lib/api";
+import { isDemoAccount } from "../lib/demo";
 import {
   Button,
   Card,
@@ -281,6 +282,7 @@ export function PasswordPage() {
   const navigate = useNavigate();
   const client = useQueryClient();
   const { user } = useAuth();
+  if (isDemoAccount(user?.email)) return <Navigate to="/" replace />;
   return (
     <div className="auth-page">
       <div className="auth-brand">

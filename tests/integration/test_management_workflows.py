@@ -117,6 +117,29 @@ def test_accounts_require_password_change_and_preserve_last_admin(auth_context):
     asyncio.run(scenario())
 
 
+def test_public_demo_account_cannot_change_shared_password(auth_context):
+    session, user = auth_context
+    user.email = "producer.demo@relay.local"
+    session.flush()
+
+    async def scenario():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://testserver"
+        ) as client:
+            await sign_in(client, user.email)
+            response = await client.post(
+                "/auth/password",
+                json={
+                    "current_password": PASSWORD,
+                    "new_password": "replacement-pass-123",
+                },
+            )
+            assert response.status_code == 403
+            assert response.json()["error"]["code"] == "SHARED_DEMO_ACCOUNT"
+
+    asyncio.run(scenario())
+
+
 def test_upload_review_catalog_download_replay_and_queue_controls(
     auth_context, monkeypatch
 ):

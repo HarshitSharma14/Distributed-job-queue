@@ -22,6 +22,7 @@ from distributed_job_queue.api.management_services import audit, revoke_user_acc
 from distributed_job_queue.auth.security import hash_password, verify_password
 from distributed_job_queue.auth.service import AuthenticatedPrincipal
 from distributed_job_queue.domain.identity import UserRole, UserStatus
+from distributed_job_queue.demo.accounts import is_public_demo_account
 from distributed_job_queue.persistence.models import (
     User,
     UserRoleAssignment,
@@ -212,6 +213,12 @@ def change_password(
     user = session.scalar(
         select(User).where(User.id == principal.user_id).with_for_update()
     )
+    if is_public_demo_account(user.email):
+        raise APIError(
+            status_code=403,
+            code="SHARED_DEMO_ACCOUNT",
+            message="The shared demo account password cannot be changed",
+        )
     if not verify_password(user.password_hash, body.current_password):
         raise APIError(
             status_code=400,
