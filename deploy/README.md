@@ -31,7 +31,7 @@ docker compose --env-file deploy/.env.production \
   -f compose.yaml -f compose.production.yaml up -d --build
 ```
 
-Caddy obtains and renews certificates after DNS resolves and ports 80/443 reach the VM. Verify both endpoints and the private port set:
+Caddy obtains and renews certificates after DNS resolves and ports 80/443 reach the VM. It uses the certificate authority's default account behavior; an ACME contact email is not required. Verify both endpoints and the private port set:
 
 ```sh
 curl --fail "https://$RELAY_DOMAIN/health/ready"

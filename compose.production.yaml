@@ -75,7 +75,6 @@ services:
     environment:
       RELAY_DOMAIN: ${RELAY_DOMAIN:?Set RELAY_DOMAIN in deploy/.env.production}
       RELAY_STORAGE_DOMAIN: ${RELAY_STORAGE_DOMAIN:?Set RELAY_STORAGE_DOMAIN in deploy/.env.production}
-      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL in deploy/.env.production}
     ports:
       - "80:80"
       - "443:443"
