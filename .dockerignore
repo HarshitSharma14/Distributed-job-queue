@@ -1,0 +1,17 @@
+.git
+.venv
+.env
+.env.*
+!.env.example
+frontend/node_modules
+frontend/dist
+frontend/*.tsbuildinfo
+__pycache__
+.pytest_cache
+*.pyc
+planningDocs
+Resume_Simple.tex
+artifacts
+
+frontend/test-results
+frontend/playwright-report

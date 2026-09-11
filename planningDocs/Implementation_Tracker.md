@@ -5,8 +5,8 @@ This is the working checklist for implementation. We complete and verify each it
 ## Current focus
 
 - **Current phase:** Phase 7.5 — Role-scoped dashboard product
-- **Next step:** Add detailed Admin jobs, Workers, queues, and dead-letter screens
-- **Current milestone:** Local dashboards can be filled idempotently with multi-owner demo identities, Job Types, Workers, 40 jobs, and coherent attempt history; 173 backend tests and 3 frontend tests pass
+- **Next step:** Complete the live multi-process worker smoke test, then add deployment configuration
+- **Current milestone:** Local infrastructure, migrations, demo data, API smoke checks, 173 backend tests, 3 frontend tests, and the production frontend build pass
 
 ## Phase 1 — Project foundation
 
@@ -138,8 +138,8 @@ This is the working checklist for implementation. We complete and verify each it
 - [ ] Add Dockerfiles
 - [ ] Add Docker Compose services
 - [ ] Run API, workers, scheduler, recovery, PostgreSQL, Redis, and MinIO together
-- [ ] Document local setup and commands
-- [ ] Run the complete integration test suite
+- [x] Document local setup and commands
+- [x] Run the complete integration test suite
 
 ## Definition of done
 
@@ -212,3 +212,4 @@ This is the working checklist for implementation. We complete and verify each it
 | 2026-08-30 | Role dashboard foundation added | Added a React/TypeScript/Vite SPA, same-origin cookie and CSRF integration, protected multi-role workspaces, shared responsive UI, lazy-loaded Admin operational charts, Publisher and Producer analytics, Worker assignments and history, FastAPI `/app` serving, 3 frontend tests, and a production build |
 | 2026-08-30 | Dashboard demo dataset added | Added a development-only idempotent seeder with one multi-role login, additional cross-owner identities, disabled historical Job Types, online/offline Workers, 40 jobs across six states, and coherent attempt history |
 | 2026-08-30 | Test database isolated | Moved pytest to a recreated and migrated `queue_test` database with a fail-closed `_test` naming guard, preserving development and seeded dashboard rows while keeping global integration tests deterministic; all 173 backend tests pass |
+| 2026-09-02 | Local full validation completed | Started PostgreSQL, Redis, and MinIO; added automatic MinIO bucket initialization; applied migrations; seeded demo data; verified API login/current-user access; passed 173 backend tests, 3 frontend tests, and the frontend production build |

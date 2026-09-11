@@ -1,12 +1,44 @@
+# Local demo: configure BOOTSTRAP_ADMIN_PASSWORD once, then use /app.
+x-platform-env: &platform-env
+  APP_ENV: development
+  AUTH_COOKIE_SECURE: "false"
+  API_HOST: 0.0.0.0
+  API_PORT: "8000"
+  DATABASE_URL: postgresql+psycopg://queue:queue@postgres:5432/queue
+  REDIS_URL: redis://redis:6379/0
+  MINIO_ENDPOINT: http://minio:9000
+  MINIO_PUBLIC_ENDPOINT: http://localhost:${MINIO_PORT:-9000}
+  MINIO_ACCESS_KEY: minioadmin
+  MINIO_SECRET_KEY: minioadmin
+  METRICS_TOKEN: ${METRICS_TOKEN:-local-demo-metrics-token}
+  METRICS_PORT: "9100"
+  PROCESS_HEALTH_FILE: /tmp/relay-progress
+
+x-app-service: &app-service
+  image: relay-local:dev
+  restart: unless-stopped
+  init: true
+  environment: *platform-env
+  depends_on:
+    init:
+      condition: service_completed_successfully
+  healthcheck:
+    test: ["CMD", "python", "-c", "import os,time; assert time.time()-os.stat('/tmp/relay-progress').st_mtime < 60"]
+    interval: 10s
+    timeout: 5s
+    retries: 6
+    start_period: 20s
+
 services:
   postgres:
+    restart: unless-stopped
     image: postgres:16
     environment:
       POSTGRES_DB: queue
       POSTGRES_USER: queue
       POSTGRES_PASSWORD: queue
     ports:
-      - "5432:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -16,9 +48,10 @@ services:
       retries: 10
 
   redis:
+    restart: unless-stopped
     image: redis:7
     ports:
-      - "6379:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -28,18 +61,101 @@ services:
       retries: 10
 
   minio:
+    restart: unless-stopped
     image: minio/minio
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:${MINIO_PORT:-9000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
       - minio_data:/data
 
+  minio-init:
+    image: minio/mc
+    depends_on:
+      minio:
+        condition: service_started
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        until mc alias set local http://minio:9000 minioadmin minioadmin; do
+          sleep 1;
+        done;
+        set -e;
+        mc mb --ignore-existing local/job-results;
+        mc mb --ignore-existing local/handler-artifacts;
+
+  init:
+    user: "0:0"
+    build: .
+    image: relay-local:dev
+    command: ["sh", "-c", "alembic upgrade head && python -m distributed_job_queue.bootstrap && chown -R 1000:1000 /var/lib/djq /var/lib/djq-metrics"]
+    environment:
+      <<: *platform-env
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-admin@relay.local}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+    volumes:
+      - platform_state:/var/lib/djq
+      - prometheus_config:/var/lib/djq-metrics
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+
+  api:
+    <<: *app-service
+    command: ["job-api"]
+    environment:
+      <<: *platform-env
+      HANDLER_SIGNING_FILE: /var/lib/djq/signing.json
+      PROMETHEUS_URL: http://prometheus:9090
+    volumes:
+      - platform_state:/var/lib/djq:ro
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready', timeout=5)"]
+      interval: 10s
+      timeout: 6s
+      retries: 10
+      start_period: 20s
+
+  outbox:
+    <<: *app-service
+    command: ["outbox-publisher"]
+  scheduler:
+    <<: *app-service
+    command: ["job-scheduler"]
+  recovery:
+    <<: *app-service
+    command: ["recovery-monitor"]
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    restart: unless-stopped
+    volumes:
+      - prometheus_config:/etc/prometheus:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
 volumes:
+  platform_state:
+  prometheus_config:
+  prometheus_data:
   postgres_data:
   redis_data:
   minio_data:

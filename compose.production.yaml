@@ -1,0 +1,94 @@
+# Production overrides for the base stack. Run with:
+# docker compose --env-file deploy/.env.production -f compose.yaml -f compose.production.yaml up -d --build
+x-production-environment: &production-environment
+  APP_ENV: production
+  APP_DEBUG: "false"
+  AUTH_COOKIE_SECURE: "true"
+  DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in deploy/.env.production}
+  REDIS_URL: redis://redis:6379/0
+  MINIO_ENDPOINT: http://minio:9000
+  MINIO_PUBLIC_ENDPOINT: https://${RELAY_STORAGE_DOMAIN:?Set RELAY_STORAGE_DOMAIN in deploy/.env.production}
+  MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER in deploy/.env.production}
+  MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in deploy/.env.production}
+  METRICS_TOKEN: ${METRICS_TOKEN:?Set METRICS_TOKEN in deploy/.env.production}
+  METRICS_PORT: "9100"
+  PROCESS_HEALTH_FILE: /tmp/relay-progress
+  WORKER_GATEWAY_URL: https://${RELAY_DOMAIN:?Set RELAY_DOMAIN in deploy/.env.production}
+
+services:
+  postgres:
+    ports: !reset []
+    environment:
+      POSTGRES_DB: queue
+      POSTGRES_USER: queue
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in deploy/.env.production}
+
+  redis:
+    ports: !reset []
+
+  minio:
+    ports: !reset []
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER in deploy/.env.production}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in deploy/.env.production}
+
+  minio-init:
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER in deploy/.env.production}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in deploy/.env.production}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        until mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"; do
+          sleep 1;
+        done;
+        set -e;
+        mc mb --ignore-existing local/job-results;
+        mc mb --ignore-existing local/handler-artifacts;
+
+  init:
+    environment:
+      <<: *production-environment
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:?Set BOOTSTRAP_ADMIN_EMAIL in deploy/.env.production}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:?Set BOOTSTRAP_ADMIN_PASSWORD in deploy/.env.production}
+
+  api:
+    environment:
+      <<: *production-environment
+      HANDLER_SIGNING_FILE: /var/lib/djq/signing.json
+      PROMETHEUS_URL: http://prometheus:9090
+    ports: !reset []
+
+  outbox:
+    environment: *production-environment
+
+  scheduler:
+    environment: *production-environment
+
+  recovery:
+    environment: *production-environment
+
+  caddy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    environment:
+      RELAY_DOMAIN: ${RELAY_DOMAIN:?Set RELAY_DOMAIN in deploy/.env.production}
+      RELAY_STORAGE_DOMAIN: ${RELAY_STORAGE_DOMAIN:?Set RELAY_STORAGE_DOMAIN in deploy/.env.production}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL in deploy/.env.production}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
+volumes:
+  caddy_data:
+  caddy_config:

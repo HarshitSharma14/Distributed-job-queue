@@ -1,5 +1,11 @@
 # Distributed Job Queue
 
+## Complete local dashboard release
+
+Set `BOOTSTRAP_ADMIN_PASSWORD` (at least 12 characters) in `.env`, then run `docker compose up -d --build` and open [Relay](http://localhost:8000/app/). Admins manage accounts; Publishers upload and release handlers; Producers submit and track jobs; Worker owners enroll agents in the dashboard and copy one execution command.
+
+See [the local release guide](deploy/README.md) for the full browser walkthrough, Worker setup, operational controls, backups, and verification. The sections below describe individual services and development APIs.
+
 ## Local infrastructure
 
 ### Prerequisites

@@ -1,0 +1,50 @@
+name: Verify local release
+on: [push, pull_request]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      BOOTSTRAP_ADMIN_EMAIL: admin@relay.local
+      BOOTSTRAP_ADMIN_PASSWORD: ci-bootstrap-password-123
+      API_PORT: '58000'
+      E2E_BASE_URL: http://localhost:58000
+      E2E_ADMIN_PASSWORD: ci-bootstrap-password-123
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: python -m venv .venv && .venv/bin/pip install -c requirements.lock -e '.[dev]'
+      - run: npm ci
+        working-directory: frontend
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - run: docker compose -p relay-ci up -d --build
+      - name: Wait for application readiness
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://localhost:58000/health/ready; then exit 0; fi
+            sleep 2
+          done
+          docker compose -p relay-ci logs --tail 100
+          exit 1
+      - run: .venv/bin/python -m pytest -q
+      - run: .venv/bin/alembic check
+        env:
+          DATABASE_URL: postgresql+psycopg://queue:queue@localhost:5432/queue_test
+      - run: npm test && npm run build && npm run test:e2e
+        working-directory: frontend
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-results
+          path: frontend/test-results
+      - name: Stop isolated stack
+        if: always()
+        run: docker compose -p relay-ci down -v
