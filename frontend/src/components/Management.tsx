@@ -1,5 +1,6 @@
 import {
   useId,
+  useEffect,
   cloneElement,
   type ReactElement,
   useRef,
@@ -150,6 +151,7 @@ export function Pagination({
       <span>Page {page}</span>
       <div>
         <Button
+          type="button"
           variant="secondary"
           disabled={!hasPrevious || busy}
           onClick={previous}
@@ -157,7 +159,12 @@ export function Pagination({
           <ChevronLeft size={14} />
           Previous
         </Button>
-        <Button variant="secondary" disabled={!hasNext || busy} onClick={next}>
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={!hasNext || busy}
+          onClick={next}
+        >
           Next
           <ChevronRight size={14} />
         </Button>
@@ -170,6 +177,9 @@ export function usePage<T>(path: string) {
     path,
     cursors: [],
   });
+  useEffect(() => {
+    setState({ path, cursors: [] });
+  }, [path]);
   const cursors = state.path === path ? state.cursors : [];
   const cursor = cursors.at(-1);
   const query = useQuery({

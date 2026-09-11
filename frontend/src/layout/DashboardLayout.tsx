@@ -136,6 +136,8 @@ export function DashboardLayout({ role }: { role: UserRole }) {
         ref={sidebar}
         className={`sidebar ${open ? "is-open" : ""}`}
         aria-label="Workspace navigation"
+        role={open ? "dialog" : undefined}
+        aria-modal={open ? true : undefined}
       >
         <div className="flex items-center justify-between">
           <Brand />
