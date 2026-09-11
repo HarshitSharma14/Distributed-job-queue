@@ -1,81 +1,201 @@
-import type { LucideIcon } from "lucide-react";
-import type { ReactNode } from "react";
-
+import { Check, Copy, Inbox, RefreshCw, type LucideIcon } from "lucide-react";
+import { useState, type ReactNode } from "react";
 import { relativeTime } from "../lib/format";
+import { useInteraction } from "./InteractionProvider";
 
-export function PageHeading({ eyebrow, title, description, action }: {
-  eyebrow: string;
+export function PageHeading({
+  eyebrow,
+  title,
+  description,
+  action,
+}: {
+  eyebrow?: string;
   title: string;
-  description: string;
+  description?: string;
   action?: ReactNode;
 }) {
   return (
-    <header className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+    <header className="page-heading">
       <div>
-        <p className="text-xs font-bold uppercase tracking-[0.22em] text-indigo-600">{eyebrow}</p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">{title}</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{description}</p>
+        {eyebrow && <p className="eyebrow">{eyebrow}</p>}
+        <h1>{title}</h1>
+        {description && <p className="page-description">{description}</p>}
       </div>
-      {action}
+      {action && <div className="page-actions">{action}</div>}
     </header>
   );
 }
-
-export function StatCard({ label, value, note, icon: Icon, tone = "indigo" }: {
+export function StatCard({
+  label,
+  value,
+  note,
+}: {
   label: string;
   value: string;
   note: string;
-  icon: LucideIcon;
-  tone?: "indigo" | "emerald" | "amber" | "slate";
+  icon?: LucideIcon;
+  tone?: string;
 }) {
-  const tones = {
-    indigo: "bg-indigo-50 text-indigo-600",
-    emerald: "bg-emerald-50 text-emerald-600",
-    amber: "bg-amber-50 text-amber-600",
-    slate: "bg-slate-100 text-slate-600",
-  };
   return (
-    <article className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-      <div className={`grid h-10 w-10 place-items-center rounded-xl ${tones[tone]}`}><Icon className="h-5 w-5" /></div>
-      <p className="mt-5 text-sm font-medium text-slate-500">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">{value}</p>
-      <p className="mt-2 text-xs text-slate-400">{note}</p>
+    <article className="stat">
+      <p className="stat-label">{label}</p>
+      <p className="stat-value">{value}</p>
+      <p className="stat-note">{note}</p>
     </article>
   );
 }
-
-export function Panel({ title, description, children, className = "" }: {
+export function Panel({
+  title,
+  description,
+  children,
+  className = "",
+  action,
+}: {
   title: string;
   description?: string;
   children: ReactNode;
   className?: string;
+  action?: ReactNode;
 }) {
   return (
-    <section className={`rounded-2xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] ${className}`}>
-      <div className="border-b border-slate-100 px-5 py-4">
-        <h2 className="font-semibold text-slate-900">{title}</h2>
-        {description && <p className="mt-1 text-xs text-slate-500">{description}</p>}
-      </div>
+    <section className={`panel ${className}`}>
+      <header className="panel-heading">
+        <div>
+          <h2>{title}</h2>
+          {description && <p>{description}</p>}
+        </div>
+        {action}
+      </header>
       {children}
     </section>
   );
 }
-
+export function statusTone(status: string) {
+  if (
+    ["COMPLETED", "ONLINE", "ACTIVE", "APPROVED", "VERIFIED"].includes(status)
+  )
+    return "success";
+  if (
+    ["FAILED", "DEAD_LETTERED", "OFFLINE", "REJECTED", "REVOKED"].includes(
+      status,
+    )
+  )
+    return "danger";
+  if (status === "RUNNING") return "running";
+  if (["RETRY_WAIT", "PENDING_APPROVAL", "PAUSED"].includes(status))
+    return "warning";
+  return "neutral";
+}
 export function StatusBadge({ status }: { status: string }) {
-  const style = status === "COMPLETED" || status === "ONLINE"
-    ? "bg-emerald-50 text-emerald-700 ring-emerald-600/20"
-    : status === "FAILED" || status === "DEAD_LETTERED" || status === "OFFLINE"
-      ? "bg-rose-50 text-rose-700 ring-rose-600/20"
-      : status === "RUNNING"
-        ? "bg-blue-50 text-blue-700 ring-blue-600/20"
-        : "bg-amber-50 text-amber-700 ring-amber-600/20";
-  return <span className={`rounded-full px-2 py-1 text-[11px] font-bold ring-1 ring-inset ${style}`}>{status.replaceAll("_", " ")}</span>;
+  return (
+    <span className={`status status-${statusTone(status)}`}>
+      <span className="status-dot" aria-hidden="true" />
+      {status.replaceAll("_", " ")}
+    </span>
+  );
 }
-
-export function EmptyRows({ label }: { label: string }) {
-  return <div className="px-5 py-12 text-center text-sm text-slate-400">No {label} yet.</div>;
+export function EmptyRows({
+  label,
+  description,
+  action,
+}: {
+  label: string;
+  description?: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="empty-state">
+      <Inbox size={23} aria-hidden="true" />
+      <p>No {label}.</p>
+      <span>
+        {description ??
+          "Records will appear here when they are available. If filters are applied, try broadening them."}
+      </span>
+      {action}
+    </div>
+  );
 }
-
-export function TimeCell({ value }: { value: string }) {
-  return <span title={new Date(value).toLocaleString()}>{relativeTime(value)}</span>;
+export function TimeCell({ value }: { value: string | null | undefined }) {
+  if (!value) return <span className="text-muted">—</span>;
+  return (
+    <time
+      className="time-cell"
+      dateTime={value}
+      title={new Date(value).toLocaleString()}
+    >
+      {relativeTime(value)}
+    </time>
+  );
+}
+export function CopyButton({
+  value,
+  label = "Copy",
+}: {
+  value: string;
+  label?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  const { notify } = useInteraction();
+  return (
+    <button
+      className="icon-button"
+      aria-label={label}
+      title={label}
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(value);
+          setCopied(true);
+          notify(`${label} — copied`);
+        } catch {
+          notify(
+            "Clipboard unavailable. Select and copy the text manually.",
+            true,
+          );
+        }
+      }}
+    >
+      {copied ? <Check size={13} /> : <Copy size={13} />}
+    </button>
+  );
+}
+export function IdCell({ value }: { value: string }) {
+  return (
+    <span className="id-cell">
+      <code title={value}>
+        {value.length > 22 ? `${value.slice(0, 8)}…${value.slice(-6)}` : value}
+      </code>
+      <CopyButton value={value} label="Copy ID" />
+    </span>
+  );
+}
+export function DataTable({
+  children,
+  label,
+}: {
+  children: ReactNode;
+  label: string;
+}) {
+  return (
+    <div className="table-scroll" role="region" aria-label={label} tabIndex={0}>
+      <table className="data-table">{children}</table>
+    </div>
+  );
+}
+export function RefreshButton({
+  refresh,
+  busy,
+}: {
+  refresh: () => unknown;
+  busy?: boolean;
+}) {
+  return (
+    <button
+      className="button button-secondary"
+      disabled={busy}
+      onClick={() => void refresh()}
+    >
+      <RefreshCw size={14} className={busy ? "animate-spin" : ""} />
+      Refresh
+    </button>
+  );
 }
