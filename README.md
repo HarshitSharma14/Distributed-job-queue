@@ -1,5 +1,37 @@
 # Distributed Job Queue
 
+## 🚀 Live Production Demo
+
+The Distributed Job Queue control plane is deployed and running live on an Oracle Cloud Infrastructure (OCI) Always Free Tier VM:
+- **Web Dashboard**: [https://relay.140-238-241-160.sslip.io/app/login](https://relay.140-238-241-160.sslip.io/app/login)
+- **Worker Gateway / API**: `https://relay.140-238-241-160.sslip.io`
+- **Object Storage (MinIO)**: `https://storage.relay.140-238-241-160.sslip.io`
+
+### Guided Public Demo Credentials
+To explore the role-aware dashboard immediately, log in with our pre-seeded public demo account:
+- **Email**: `demo@relay.local`
+- **Password**: `relay-demo-password`
+
+This single account is pre-granted **Admin**, **Publisher**, **Producer**, and **Worker Owner** roles, allowing you to walk through the entire lifecycle—from approving custom Python handlers and enrolling worker agents to queuing jobs and observing execution in real-time.
+
+---
+
+## 📚 Architectural & Implementation Documentation
+
+Explore the deep architecture, design patterns, and deployment journey of Relay through our comprehensive technical guides:
+
+| Document | Description |
+| :--- | :--- |
+| **[System Architecture & Design (HLD/LLD)](planningDocs/HLD+Component_Design+LLD.md)** | Deep-dive into the high-level system components, dual-database consistency (PostgreSQL + Redis), low-level database schemas, API contracts, security bounds, and worker sandboxing specifications. |
+| **[Technology Design Specification](planningDocs/Technology_Design.md)** | Details about security design (cryptography, token designs), data pipelines, outbox pattern, recovery logic, database choices, and the worker containerized execution sandbox. |
+| **[OCI Production Deployment Walkthrough](planningDocs/Oracle_Always_Free_Deployment_Walkthrough.md)** | A step-by-step checklist and study guide for setting up and deploying this platform to an Oracle Cloud Infrastructure Always Free VM standard ARM64 instance with Canonical Ubuntu, UFW firewalling, and automated Caddy reverse proxy HTTPS. |
+| **[Codebase Structure](planningDocs/Structure.md)** | A guide to the layout of the project, detailing the roles of the domain, persistence, API, workers, scheduler, recovery, and test folders. |
+| **[Implementation Tracker & Milestone Log](planningDocs/Implementation_Tracker.md)** | Chronological history of engineering milestones, implemented features, and technical enhancements. |
+| **[Market Research & Competitors](planningDocs/marketResearch.md)** | Comparison against standard industry solutions (such as Inngest, SQS, RabbitMQ, and Kafka) outlining Relay's unique niche in operator-run environments. |
+| **[Production Release Guide](deploy/README.md)** | Operational guides on how to manage, run, back up, restore, and upgrade the production stack using Docker Compose and Caddy. |
+
+---
+
 ## Complete local dashboard release
 
 Set `BOOTSTRAP_ADMIN_PASSWORD` (at least 12 characters) in `.env`, then run `docker compose up -d --build` and open [Relay](http://localhost:8000/app/). Admins manage accounts; Publishers upload and release handlers; Producers submit and track jobs; Worker owners enroll agents in the dashboard and copy one execution command.

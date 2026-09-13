@@ -392,13 +392,18 @@ Docker-published ports can interact with firewall rules differently from ordinar
 
 - [x] Add `0.0.0.0/0` to the default route table with `relay-internet-gateway` as its target.
 - [x] Return to Compute instance creation and select the existing VCN and public subnet.
-- [x] Assign the VM a public IPv4 address.
+- [x] Assign the VM a public IPv4 address (`140.238.241.160`).
 - [x] Configure and preserve the SSH key.
 - [x] Create the VM.
 - [x] Connect to the VM over SSH.
 - [x] Install and validate Docker Engine and Docker Compose.
 - [x] Restrict ingress with the OCI security list and host firewall.
 - [x] Prepare the production Compose stack and TLS reverse proxy.
-- [ ] Point the application and storage DNS names at the VM.
-- [ ] Create the private production environment file on the VM.
-- [ ] Deploy the production Compose stack and complete acceptance checks.
+- [x] Point the application and storage DNS names at the VM.
+  - Used wildcard/IP DNS via `sslip.io`:
+    - Application Domain: `relay.140-238-241-160.sslip.io`
+    - Object Storage Domain: `storage.relay.140-238-241-160.sslip.io`
+- [x] Create the private production environment file (`deploy/.env.production`) on the VM.
+- [x] Deploy the production Compose stack and complete acceptance checks.
+  - Verification complete: Caddy HTTPS is active, and the application is live at `https://relay.140-238-241-160.sslip.io/app/login`.
+
